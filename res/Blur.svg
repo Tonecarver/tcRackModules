@@ -1,0 +1,450 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="76.199997mm"
+   height="128.5mm"
+   viewBox="0 0 76.199997 128.5"
+   version="1.1"
+   id="svg5"
+   inkscape:version="1.1 (c68e22c387, 2021-05-23)"
+   sodipodi:docname="Blur.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview7"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:pageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:document-units="mm"
+     showgrid="false"
+     inkscape:zoom="1.0482005"
+     inkscape:cx="185.55611"
+     inkscape:cy="132.13121"
+     inkscape:window-width="1284"
+     inkscape:window-height="947"
+     inkscape:window-x="544"
+     inkscape:window-y="14"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="layer2"
+     height="128.5mm"
+     width="50.8mm"
+     showguides="false" />
+  <defs
+     id="defs2">
+    <rect
+       x="10.494176"
+       y="-108.75782"
+       width="272.84857"
+       height="51.516862"
+       id="rect17595" />
+    <rect
+       x="53.967293"
+       y="951.17352"
+       width="311.6611"
+       height="76.903389"
+       id="rect44562" />
+    <rect
+       x="473.56299"
+       y="925.53906"
+       width="230.71017"
+       height="62.062386"
+       id="rect41400" />
+    <rect
+       x="493.80072"
+       y="783.87494"
+       width="191.58389"
+       height="55.316475"
+       id="rect36810" />
+    <rect
+       x="470.86462"
+       y="671.89276"
+       width="58.014835"
+       height="24.285278"
+       id="rect33240" />
+    <rect
+       x="431.73834"
+       y="607.13202"
+       width="182.1396"
+       height="49.919746"
+       id="rect30990" />
+    <rect
+       x="426.34161"
+       y="489.75317"
+       width="237.45609"
+       height="71.50666"
+       id="rect28630" />
+    <rect
+       x="442.5318"
+       y="329.20047"
+       width="230.71017"
+       height="110.63295"
+       id="rect27194" />
+    <rect
+       x="433.08752"
+       y="192.93307"
+       width="250.94791"
+       height="83.6493"
+       id="rect25340" />
+    <rect
+       x="268.48727"
+       y="995.69653"
+       width="171.34615"
+       height="44.523018"
+       id="rect20604" />
+    <rect
+       x="273.884"
+       y="918.79315"
+       width="207.77408"
+       height="40.475468"
+       id="rect17430" />
+    <rect
+       x="308.96274"
+       y="854.03241"
+       width="168.6478"
+       height="47.221382"
+       id="rect15356" />
+    <rect
+       x="339.99393"
+       y="709.66992"
+       width="248.24956"
+       height="103.88704"
+       id="rect12160" />
+    <rect
+       x="349.43823"
+       y="648.95667"
+       width="52.618111"
+       height="25.634464"
+       id="rect2028" />
+    <rect
+       x="433.08752"
+       y="192.93307"
+       width="83.995113"
+       height="27.362357"
+       id="rect25340-8" />
+  </defs>
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1"
+     style="display:inline;opacity:1">
+    <path
+       style="fill:#cccccc;stroke:none;stroke-width:0.439817"
+       d="M 76.199904,64.249991 V 0 H 38.09991 0 v 64.249991 64.249869 h 38.09991 38.099994 z"
+       id="path356" />
+    <text
+       xml:space="preserve"
+       transform="scale(0.26458333)"
+       id="text17428"
+       style="font-style:normal;font-weight:normal;font-size:40px;line-height:1.25;font-family:sans-serif;white-space:pre;shape-inside:url(#rect17430);fill:#000000;fill-opacity:1;stroke:none"><tspan
+         x="273.88477"
+         y="995.76274"
+         id="tspan41441"><tspan
+           dx="0 24.121094 31.484375"
+           id="tspan41439">POS</tspan></tspan></text>
+    <text
+       xml:space="preserve"
+       transform="scale(0.26458333)"
+       id="text20602"
+       style="font-style:normal;font-weight:normal;font-size:40px;line-height:1.25;font-family:sans-serif;white-space:pre;shape-inside:url(#rect20604);fill:#000000;fill-opacity:1;stroke:none" />
+  </g>
+  <g
+     inkscape:groupmode="layer"
+     id="layer2"
+     inkscape:label="components"
+     style="display:inline">
+    <rect
+       style="opacity:1;fill:#1a1a1a;stroke-width:0.248504"
+       id="rect528"
+       width="14.278846"
+       height="13.225871"
+       x="55.033321"
+       y="110.8615" />
+    <text
+       xml:space="preserve"
+       transform="matrix(0.26458333,0,0,0.26458333,-86.387022,-66.802662)"
+       id="text2026"
+       style="font-style:normal;font-weight:normal;font-size:21.3333px;line-height:1.25;font-family:sans-serif;white-space:pre;shape-inside:url(#rect2028);opacity:1;fill:#000000;fill-opacity:1;stroke:none"><tspan
+         x="349.4375"
+         y="668.42005"
+         id="tspan41443">IN</tspan></text>
+    <text
+       xml:space="preserve"
+       transform="matrix(0.26458333,0,0,0.26458333,-32.484367,-82.866281)"
+       id="text12158"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:21.3333px;line-height:1.25;font-family:sans-serif;-inkscape-font-specification:'sans-serif, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;white-space:pre;shape-inside:url(#rect12160);opacity:1;fill:#000000;fill-opacity:1;stroke:none"><tspan
+         x="339.99414"
+         y="729.13294"
+         id="tspan41445">Out</tspan></text>
+    <text
+       xml:space="preserve"
+       transform="matrix(0.26458333,0,0,0.26458333,-78.176686,-131.11371)"
+       id="text15354"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:21.3333px;line-height:1.25;font-family:sans-serif;-inkscape-font-specification:'sans-serif, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;white-space:pre;shape-inside:url(#rect15356);opacity:1;fill:#000000;fill-opacity:1;stroke:none"><tspan
+         x="308.96289"
+         y="873.49622"
+         id="tspan41447">Freeze</tspan></text>
+    <text
+       xml:space="preserve"
+       transform="matrix(0.26458333,0,0,0.26458333,-67.824522,-33.12742)"
+       id="text25338"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:18.6667px;line-height:1.25;font-family:sans-serif;-inkscape-font-specification:'sans-serif, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;white-space:pre;shape-inside:url(#rect25340);opacity:1;fill:#000000;fill-opacity:1;stroke:none"><tspan
+         x="433.08789"
+         y="209.96379"
+         id="tspan41449">Position </tspan></text>
+    <text
+       xml:space="preserve"
+       transform="matrix(0.26458333,0,0,0.26458333,-68.062253,-43.408418)"
+       id="text25338-6"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:18.6667px;line-height:1.25;font-family:sans-serif;-inkscape-font-specification:'sans-serif, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;white-space:pre;shape-inside:url(#rect25340-8);display:inline;fill:#000000;fill-opacity:1;stroke:none"><tspan
+         x="433.08789"
+         y="209.96379"
+         id="tspan41451">Length</tspan></text>
+    <text
+       xml:space="preserve"
+       transform="matrix(0.26458333,0,0,0.26458333,-66.039619,-100.21759)"
+       id="text28628"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:18.6667px;line-height:1.25;font-family:sans-serif;-inkscape-font-specification:'sans-serif, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;white-space:pre;shape-inside:url(#rect28630);opacity:1;fill:#000000;fill-opacity:1;stroke:none"><tspan
+         x="426.3418"
+         y="506.7841"
+         id="tspan41453">Mod Rate</tspan></text>
+    <text
+       xml:space="preserve"
+       transform="matrix(0.26458333,0,0,0.26458333,-67.467438,-120.18281)"
+       id="text30988"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:18.6667px;line-height:1.25;font-family:sans-serif;-inkscape-font-specification:'sans-serif, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;white-space:pre;shape-inside:url(#rect30990);opacity:1;fill:#000000;fill-opacity:1;stroke:none"><tspan
+         x="431.73828"
+         y="624.16301"
+         id="tspan41455">Mod Depth</tspan></text>
+    <text
+       xml:space="preserve"
+       transform="matrix(0.26458333,0,0,0.26458333,-77.268562,-109.75826)"
+       id="text33238"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:18.6667px;line-height:1.25;font-family:sans-serif;-inkscape-font-specification:'sans-serif, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;white-space:pre;shape-inside:url(#rect33240);opacity:1;fill:#000000;fill-opacity:1;stroke:none"><tspan
+         x="470.86523"
+         y="688.92277"
+         id="tspan41457">Bias</tspan></text>
+    <text
+       xml:space="preserve"
+       transform="matrix(0.26458333,0,0,0.26458333,-83.70624,-150.47816)"
+       id="text36808"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:18.6667px;line-height:1.25;font-family:sans-serif;-inkscape-font-specification:'sans-serif, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;white-space:pre;shape-inside:url(#rect36810);opacity:1;fill:#000000;fill-opacity:1;stroke:none"><tspan
+         x="493.80078"
+         y="800.9052"
+         id="tspan41459">Spread</tspan></text>
+    <text
+       xml:space="preserve"
+       transform="matrix(0.26458333,0,0,0.26458333,-78.533429,-165.67296)"
+       id="text41398"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:18.6667px;line-height:1.25;font-family:sans-serif;-inkscape-font-specification:'sans-serif, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;white-space:pre;shape-inside:url(#rect41400);opacity:1;fill:#000000;fill-opacity:1;stroke:none"><tspan
+         x="473.5625"
+         y="942.56926"
+         id="tspan41461">Phase</tspan></text>
+    <circle
+       style="opacity:1;fill:#ff0000;fill-rule:evenodd;stroke-width:0.358028"
+       id="path71"
+       cx="17.803986"
+       cy="10.667838"
+       inkscape:label="Length_Attenuverter"
+       r="3.5" />
+    <circle
+       style="opacity:1;fill:#ff0000;fill-rule:evenodd;stroke-width:0.40391"
+       id="path73"
+       cx="17.803986"
+       cy="60.019791"
+       inkscape:label="Spread_Attenuverter"
+       r="3.5" />
+    <circle
+       style="opacity:1;fill:#ff0000;fill-rule:evenodd;stroke-width:0.418087"
+       id="path75"
+       cx="17.803986"
+       cy="32.460823"
+       inkscape:label="Mod_Rate_Attenuverter"
+       r="3.5" />
+    <circle
+       style="opacity:1;fill:#ff0000;fill-rule:evenodd;stroke-width:0.410173"
+       id="path77"
+       cx="17.803986"
+       cy="82.306946"
+       inkscape:label="Phase_Attenuverter"
+       r="3.5" />
+    <circle
+       style="opacity:1;fill:#ff0000;fill-rule:evenodd;stroke-width:0.29757"
+       id="path79"
+       cx="37.055271"
+       cy="21.017286"
+       inkscape:label="Position_Knob"
+       r="3.5" />
+    <circle
+       style="opacity:1;fill:#ff0000;fill-rule:evenodd;stroke-width:0.318115"
+       id="path81"
+       cx="37.055271"
+       cy="71.111008"
+       inkscape:label="Bias_Knob"
+       r="3.5" />
+    <circle
+       style="opacity:1;fill:#ff0000;fill-rule:evenodd;stroke-width:0.292328"
+       id="path83"
+       cx="37.055271"
+       cy="82.306946"
+       inkscape:label="Phase_Knob"
+       r="3.5" />
+    <circle
+       style="opacity:1;fill:#ff0000;fill-rule:evenodd;stroke-width:0.306792"
+       id="path87"
+       cx="29.39925"
+       cy="97.982765"
+       inkscape:label="Freeze_Button"
+       r="3.5" />
+    <circle
+       style="opacity:1;fill:#00ff00;fill-rule:evenodd;stroke-width:0.247343"
+       id="path89"
+       cx="9.925477"
+       cy="117.47443"
+       inkscape:label="Audio_In"
+       r="3.5" />
+    <circle
+       style="opacity:1;fill:#0000ff;fill-rule:evenodd;stroke-width:0.171951"
+       id="path91"
+       cx="62.030682"
+       cy="117.47443"
+       inkscape:label="Audio_Out"
+       r="3.5" />
+    <circle
+       style="opacity:1;fill:#ff00ff;stroke-width:0.129024"
+       id="path231"
+       cx="15.833158"
+       cy="108.52742"
+       inkscape:label="AUDIO_IN_LED"
+       r="1" />
+    <circle
+       style="opacity:1;fill:#ff0000;stroke-width:0.276538"
+       id="path362"
+       cx="37.055271"
+       cy="10.667838"
+       inkscape:label="Length_Knob"
+       r="3.5" />
+    <circle
+       style="opacity:1;fill:#ff0000;stroke-width:0.276538"
+       id="path386"
+       cx="17.803986"
+       cy="21.017286"
+       inkscape:label="Position_Attenuverter"
+       r="3.5" />
+    <circle
+       style="opacity:1;fill:#ff0000;stroke-width:0.341366"
+       id="path388"
+       cx="17.803986"
+       cy="71.111008"
+       inkscape:label="Bias_Attenuverter"
+       r="3.5" />
+    <circle
+       style="opacity:1;fill:#ff0000;stroke-width:0.296597"
+       id="path390"
+       cx="17.803986"
+       cy="43.552101"
+       inkscape:label="Mod_Depth_Attenuverter"
+       r="3.5" />
+    <circle
+       style="opacity:1;fill:#ff0000;stroke-width:0.27933"
+       id="path392"
+       cx="37.055271"
+       cy="60.019791"
+       inkscape:label="Spread_Knob"
+       r="3.5" />
+    <circle
+       style="opacity:1;fill:#ff0000;stroke-width:0.262049"
+       id="path394"
+       cx="37.055271"
+       cy="32.460823"
+       inkscape:label="Mod_Rate_Knob"
+       r="3.5" />
+    <circle
+       style="opacity:1;fill:#ff0000;stroke-width:0.271943"
+       id="path396"
+       cx="37.055271"
+       cy="43.552101"
+       inkscape:label="Mod_Depth_Knob"
+       r="3.5" />
+    <circle
+       style="opacity:1;fill:#00ff00;stroke-width:0.438494"
+       id="path422"
+       cx="6.3557782"
+       cy="10.667838"
+       inkscape:label="Length_CV"
+       r="3.5" />
+    <circle
+       style="opacity:1;fill:#00ff00;stroke-width:0.318116"
+       id="path424"
+       cx="6.3557782"
+       cy="21.017286"
+       inkscape:label="Position_CV"
+       r="3.5" />
+    <circle
+       style="opacity:1;fill:#00ff00;stroke-width:0.384585"
+       id="path426"
+       cx="6.3557782"
+       cy="60.019791"
+       inkscape:label="Spread_CV"
+       r="3.5" />
+    <circle
+       style="opacity:1;fill:#00ff00;stroke-width:0.444895"
+       id="path428"
+       cx="6.3557782"
+       cy="82.306946"
+       inkscape:label="Phase_CV"
+       r="3.5" />
+    <circle
+       style="opacity:1;fill:#00ff00;stroke-width:0.321766"
+       id="path430"
+       cx="6.3557782"
+       cy="32.460823"
+       inkscape:label="Mod_Rate_CV"
+       r="3.5" />
+    <circle
+       style="opacity:1;fill:#00ff00;stroke-width:0.3764"
+       id="path432"
+       cx="6.3557782"
+       cy="43.552101"
+       inkscape:label="Mod_Depth_CV"
+       r="3.5" />
+    <circle
+       style="opacity:1;fill:#00ff00;stroke-width:0.292328"
+       id="path434"
+       cx="6.3557782"
+       cy="71.111008"
+       inkscape:label="Bias_CV"
+       r="3.5" />
+    <circle
+       style="opacity:1;fill:#00ff00;stroke-width:0.315752"
+       id="path438"
+       cx="41.327248"
+       cy="97.982765"
+       inkscape:label="Freeze_CV"
+       r="3.5" />
+    <text
+       xml:space="preserve"
+       transform="matrix(0.26458333,0,0,0.26458333,17.213004,149.20262)"
+       id="text17593"
+       style="font-style:normal;font-weight:normal;font-size:21.3333px;line-height:1.25;font-family:sans-serif;white-space:pre;shape-inside:url(#rect17595);fill:#000000;fill-opacity:1;stroke:none"><tspan
+         x="10.494141"
+         y="-89.294796"
+         id="tspan41463">Tonecarver</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-weight:normal;font-size:10.5833px;line-height:1.25;font-family:sans-serif;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.264583"
+       x="50.483349"
+       y="98.190102"
+       id="text27057"><tspan
+         sodipodi:role="line"
+         id="tspan27055"
+         style="stroke-width:0.264583"
+         x="50.483349"
+         y="98.190102">Blur</tspan></text>
+  </g>
+</svg>

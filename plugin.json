@@ -1,0 +1,25 @@
+{
+  "slug": "Tonecarver",
+  "name": "Tonecarver",
+  "version": "1.0.0",
+  "license": "proprietary",
+  "brand": "Tonecarver",
+  "author": "Bill Davies",
+  "authorEmail": "",
+  "authorUrl": "",
+  "pluginUrl": "",
+  "manualUrl": "",
+  "sourceUrl": "",
+  "donateUrl": "",
+  "changelogUrl": "",
+  "modules": [
+    {
+      "slug": "Blur",
+      "name": "Blur",
+      "description": "Spectral Blur",
+      "tags": [
+        "spectral"
+      ]
+    }
+  ]
+}
