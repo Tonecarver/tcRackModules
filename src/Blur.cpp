@@ -1,8 +1,16 @@
 #include "plugin.hpp"
 #include <math.hpp>
 #include <dsp/fft.hpp>
-//#define MAX_FFT_FRAME_SIZE  (8096)
+
+const int MAX_FFT_FRAME_SIZE = 16384;
+//const int DFLT_FFT_FRAME_SIZE = 16384;
+//const int DFLT_FFT_FRAME_SIZE = 8192;
+//const int DFLT_FFT_FRAME_SIZE = 4096;
 const int DFLT_FFT_FRAME_SIZE = 2048;
+//const int DFLT_FFT_FRAME_SIZE = 1024;
+//const int DFLT_FFT_FRAME_SIZE = 512;
+//const int DFLT_FFT_FRAME_SIZE = 256;
+//const int DFLT_FFT_FRAME_SIZE = 32;
 
 struct ListNode {
     struct ListNode * pNext;
@@ -207,10 +215,12 @@ struct AlignedBuffer {
         int size() { 
             return numValues;
         }
-        void makeWindow() {
-            for (int k = 0; k < numValues; k++) {
-                values[k] = -.5 * cos(2.*M_PI*(float)k/(float)numValues) + .5; // Hamming window 
-                //values[k] = .5 * (1. - cos(2.*M_PI*(float)k/(float)numValues));  // Hann window
+
+        void makeWindow(int windowSize) {
+            clear();
+            for (int k = 0; k < windowSize; k++) {
+                values[k] = -.5 * cos(2.*M_PI*(float)k/(float)windowSize) + .5; // Hamming window 
+                //values[k] = .5 * (1. - cos(2.*M_PI*(float)k/(float)sizenumValues));  // Hann window
             }
         }
 };
@@ -295,16 +305,21 @@ static struct ScalingFactor {
     float scalingFactor;
 } scalingFactors[] = {
     {  44100.f, 5.f/3.75f },
-    {  48000.f, 5.f/3.56f },
-    {  88200.f, 5.f/2.50f },
-    {  96000.f, 5.f/2.345f },
-    { 176400.f, 5.f/1.635f },
-    { 192000.f, 5.f/1.575f },
-    { 352800.f, 5.f/1.35f },
-    { 384000.f, 5.f/1.335f },
-    { 705600.f, 5.f/1.28f },
-    { 768000.f, 5.f/1.27f },
+    {  48000.f, 5.f/3.75f }, //5.f/3.56f },
+    {  88200.f, 5.f/3.75f }, //5.f/2.50f },
+    {  96000.f, 5.f/3.75f }, //5.f/2.345f },
+    { 176400.f, 5.f/3.75f }, //5.f/1.635f },
+    { 192000.f, 5.f/3.75f }, //5.f/1.575f },
+    { 352800.f, 5.f/3.68f }, //5.f/1.35f },
+    { 384000.f, 5.f/3.62f }, //5.f/1.335f },
+    { 705600.f, 5.f/2.60f }, //5.f/1.28f },
+    { 768000.f, 5.f/2.445f }, //5.f/1.27f },
 };
+
+
+inline gainForDb(float dB) {
+    return pow(10, dB * 0.1); // 10^(db/10)
+}
 
 //inline lerp(float a, float b, float fraction) {
 //    return a + fraction * (b - a);
@@ -334,32 +349,34 @@ struct Blur : Module {
         POSITION_KNOB_PARAM,
         BLUR_SPREAD_ATTENUVERTER_PARAM,
 		BLUR_SPREAD_KNOB_PARAM,
-		BLUR_MIX_ATTENUVERTER_PARAM,
-		BLUR_MIX_KNOB_PARAM,
 		BLUR_FREQ_WIDTH_ATTENUVERTER_PARAM,
 		BLUR_FREQ_WIDTH_KNOB_PARAM,
 		BLUR_FREQ_CENTER_ATTENUVERTER_PARAM,
 		BLUR_FREQ_CENTER_KNOB_PARAM,
-		BLUR_BIAS_ATTENUVERTER_PARAM,
-		BLUR_BIAS_KNOB_PARAM,
-		PHASE_ATTENUVERTER_PARAM,
-		PHASE_KNOB_PARAM,
-		ROBOT_BUTTON_PARAM,
+		BLUR_MIX_ATTENUVERTER_PARAM,
+		BLUR_MIX_KNOB_PARAM,
+		PITCH_ATTENUVERTER_PARAM,
+		PITCH_KNOB_PARAM,
+		SEMITONE_BUTTON_PARAM,
+        ROBOT_BUTTON_PARAM,
 		FREEZE_ATTENUVERTER_PARAM,
         FREEZE_KNOB_PARAM,
+		GAIN_ATTENUVERTER_PARAM,
+		GAIN_KNOB_PARAM,
         NUM_PARAMS
     };
     enum InputIds {
         LENGTH_CV_INPUT,
         POSITION_CV_INPUT,
    		BLUR_SPREAD_CV_INPUT,
-		BLUR_MIX_CV_INPUT,
 		BLUR_FREQ_WIDTH_CV_INPUT,
 		BLUR_FREQ_CENTER_CV_INPUT,
-		BLUR_BIAS_CV_INPUT,
-		PHASE_CV_INPUT,
+		BLUR_MIX_CV_INPUT,
 		ROBOT_CV_INPUT,
-        FREEZE_CV_INPUT,
+		PITCH_CV_INPUT,
+		SEMITONE_CV_INPUT,
+		FREEZE_CV_INPUT,
+		GAIN_CV_INPUT,
         AUDIO_IN_INPUT,
         NUM_INPUTS
     };
@@ -368,6 +385,7 @@ struct Blur : Module {
         NUM_OUTPUTS
     };
     enum LightIds {
+		SEMITONE_LED_LIGHT,
 		ROBOT_LED_LIGHT,
         NUM_LIGHTS
     };
@@ -375,35 +393,33 @@ struct Blur : Module {
     DoubleLinkList<FftFrame>  fftFramePool;
     CircularBuffer<FftFrame>  fftFrameHistory{500};
     int iMaxHistoryFrames;
-    //float fCursorPosition = 0.5; // 50%
-    // modulation rate
-    // modulation depth 
-    // spread
-    // bias
-    // phase randomization 
 
-    AlignedBuffer window{DFLT_FFT_FRAME_SIZE};
-    AlignedBuffer inBuffer{DFLT_FFT_FRAME_SIZE};
-    AlignedBuffer outBuffer{DFLT_FFT_FRAME_SIZE};
+    AlignedBuffer window{MAX_FFT_FRAME_SIZE};
+    AlignedBuffer inBuffer{MAX_FFT_FRAME_SIZE};
+    AlignedBuffer outBuffer{MAX_FFT_FRAME_SIZE};
     int iInIndex; 
     int iLatency;
 
-    int iFftFrameSize;
+    int iFftFrameSize;   
     int iOversample;
+
+    int iSelectedFftFrameSize;   // Set by Menu Item (is UI thread concurrent?)
+    int iSelectedOversample;     // Set by Menu Item (is UI thread concurrent?)
+    float fSelectedSampleRate;   // Set by args.samplerate in process() 
+
     int iStepSize; 
-    FftFrame fftWorkspace{DFLT_FFT_FRAME_SIZE};
+    FftFrame fftWorkspace{2 * MAX_FFT_FRAME_SIZE};
     // This will ultimately be an FFT Frame pulled from the frame pool
     // and added to the history list
-    FftFrame fftTemp{DFLT_FFT_FRAME_SIZE};
+    FftFrame fftTemp{MAX_FFT_FRAME_SIZE};
 
-    AlignedBuffer lastPhase{DFLT_FFT_FRAME_SIZE/2 + 1};
-    AlignedBuffer sumPhase{DFLT_FFT_FRAME_SIZE/2 + 1};
-    float phaseExpected;
+    AlignedBuffer lastPhase{MAX_FFT_FRAME_SIZE/2 + 1};
+    AlignedBuffer sumPhase{MAX_FFT_FRAME_SIZE/2 + 1};
+    double phaseExpected;
 
-    AlignedBuffer outputAccumulator{DFLT_FFT_FRAME_SIZE * 2};
+    AlignedBuffer outputAccumulator{2 * MAX_FFT_FRAME_SIZE};
 
-    //SmbFft smbFft{DFLT_FFT_FRAME_SIZE};
-    rack::dsp::ComplexFFT complexFftEngine{DFLT_FFT_FRAME_SIZE};
+    rack::dsp::ComplexFFT * pComplexFftEngine;
     float fSampleRateScalingFactor; 
 
     Random random;
@@ -412,6 +428,15 @@ struct Blur : Module {
 
 	bool bRobot = false;
 	dsp::SchmittTrigger robotTrigger;
+
+	bool bSemitone = false;
+	dsp::SchmittTrigger semitoneTrigger;
+
+    AlignedBuffer anaMagnitude{MAX_FFT_FRAME_SIZE};
+    AlignedBuffer anaFrequency{MAX_FFT_FRAME_SIZE};
+
+    AlignedBuffer synMagnitude{MAX_FFT_FRAME_SIZE};
+    AlignedBuffer synFrequency{MAX_FFT_FRAME_SIZE};
 
     // Convert [0,10] range to [-1,1]
     // Return 0 if not connected 
@@ -422,21 +447,116 @@ struct Blur : Module {
     //    return 0.f;
     //}
 
-    // Convert [0,10] range to [0,1]
-    // Return 0 if not connected 
-    inline float getCvInput(int input_id) {
-        if (inputs[input_id].isConnected()) {
-            return (inputs[input_id].getVoltage() / 10.0);
+
+    void applyFftConfiguration() {
+        // TODO: consider doing this with single flag - reconfigRequired
+        // set that flag AFTER setting the SelectedXXX variable 
+        //
+        //  menu: 
+        //     module->selectedFoo = 99
+        //     module->reconfigRequired = true
+        //
+        // this method
+        //    if reconfig required
+        //       reconfig required = false  << race condition?
+        //       fftsize = selected 
+        //       sample rate = selected
+        //       osamp = selected
+        //       reconfigure()
+        //
+
+        bool bConfigurationRequired = false;
+
+// could do this with single if a or b or c check 
+        if (iSelectedFftFrameSize != iFftFrameSize) {
+            //iFftFrameSize = iSelectedFftFrameSize;
+            bConfigurationRequired = true;
+        } 
+
+        if (iSelectedOversample != iOversample) {
+            //iOversample = iSelectedOversample;
+            bConfigurationRequired = true;
+        } 
+
+        if (fSelectedSampleRate != fActiveSampleRate) {
+            //fActiveSampleRate = fSelectedSampleRate;
+            bConfigurationRequired = true;
         }
-        return 0.f;
+
+        if (bConfigurationRequired) {
+            configureFftEngine(iSelectedFftFrameSize, iSelectedOversample, fSelectedSampleRate);
+        }
     }
+
+    void configureFftEngine(int frameSize, int oversample, float sampleRate) { 
+        
+        iFftFrameSize = frameSize;
+        iOversample = oversample;
+        fActiveSampleRate = sampleRate; 
+
+        iSelectedFftFrameSize = iFftFrameSize;
+        iSelectedOversample = iOversample;
+        fSelectedSampleRate = fActiveSampleRate; 
+
+
+        iStepSize = iFftFrameSize / iOversample;
+        iLatency = iFftFrameSize - iStepSize;
+        iInIndex = iLatency; 
+        phaseExpected = 2.* M_PI * double(iStepSize)/double(iFftFrameSize);
+        iMaxHistoryFrames = 500;  // default 
+
+        fSampleRateScalingFactor = 1.f;
+        for (size_t k = 0; k < sizeof(scalingFactors)/sizeof(scalingFactors[0]); k++) {
+            if (scalingFactors[k].sampleRate == fActiveSampleRate) {
+                fSampleRateScalingFactor = scalingFactors[k].scalingFactor;
+                break;
+            }
+        }
+
+        window.makeWindow(frameSize);
+        inBuffer.clear();
+        outBuffer.clear();
+        outputAccumulator.clear();
+        fftFrameHistory.deleteMembers();
+        fftFramePool.drain();
+        fftWorkspace.clear();
+        lastPhase.clear();
+        sumPhase.clear();
+      
+        if (pComplexFftEngine != NULL) {
+            delete pComplexFftEngine;
+        }
+        pComplexFftEngine = new rack::dsp::ComplexFFT(iFftFrameSize);
+
+        DEBUG("--- Initialize FFT ---");
+        DEBUG("inBuffer.size() = %d", inBuffer.size());
+        DEBUG("outBuffer.size() = %d", outBuffer.size());
+        DEBUG("FftFrameHistory capacity = %d", fftFrameHistory.capacity());
+        DEBUG("FftFrameHistory available = %d", fftFrameHistory.available());
+        //DEBUG("phaseExpected = %f", phaseExpected);
+        DEBUG(" fftTemp,   size %d, numBins %d, address %p", fftTemp.size(), fftTemp.numBins(), fftTemp.values);
+        DEBUG(" InBuffer,  size %d, address %p", inBuffer.size(), inBuffer.values);
+        DEBUG(" OutBuffer, size %d, address %p", outBuffer.size(), outBuffer.values);
+        DEBUG(" Sample Rate = %f", fActiveSampleRate);
+    }
+
+//    int computeMaxHistoryFrames(float fLengthSeconds) {
+//        float fFramesPerSecond = (float(iOversample) * fActiveSampleRate) / float(iFftFrameSize);
+//
+//        fLengthSeconds = clamp(fLengthSeconds, 0.f, 10.f);  // TODO: constant 
+//        
+//        iMaxHistoryFrames =  myCeil(fFramesPerSecond * fLengthSeconds);
+//        if (iMaxHistoryFrames <= 0) {
+//            iMaxHistoryFrames = 1;
+//        }
+//    } 
 
     // if sample rate changes, drain the history - the values are likely to be noise at the new sample rate 
     // if the length changes, calculate a new max length and drain just enough frames to leave 'length' number in the history
     void adjustFrameHistoryLength() {
         float fFramesPerSecond = (float(iOversample) * fActiveSampleRate) / float(iFftFrameSize);
 
-        float fLengthSeconds = params[LENGTH_KNOB_PARAM].getValue();   // TODO: constant, 10 seconds 
+        float fLengthSeconds = params[LENGTH_KNOB_PARAM].getValue();
         fLengthSeconds += params[LENGTH_ATTENUVERTER_PARAM].getValue() * getCvInput(LENGTH_CV_INPUT);    
         fLengthSeconds = clamp(fLengthSeconds, 0.f, 1.f);
         fLengthSeconds *= 10.0; // seconds    // TODO: constant 
@@ -450,70 +570,30 @@ struct Blur : Module {
         //DEBUG(" Length seconds = %f", fLengthSeconds);
         //DEBUG(" Max history frames = %d", iMaxHistoryFrames);
 
+        // Siphon frames from the History to the Pool until the number of history frames
+        // is less than of equal to the max
         while (fftFrameHistory.numMembers() > iMaxHistoryFrames) {
             FftFrame *pFftFrame = fftFrameHistory.deQueue();
             fftFramePool.pushTail(pFftFrame);
         }
     }
 
-    void updateSampleRate(float sampleRate) {
-        fActiveSampleRate = sampleRate; 
+    void configureFftEngine_default() {
+        iSelectedFftFrameSize = DFLT_FFT_FRAME_SIZE;
+        iSelectedOversample = 4;
+        fSelectedSampleRate = 44100.0;
 
-        // if sample rate changes, drain the history - the values are likely to be noise at the new sample rate 
-        while (fftFrameHistory.numMembers() > 0) {
-            FftFrame *pFftFrame = fftFrameHistory.deQueue();
-            fftFramePool.pushTail(pFftFrame);
-        }
-
-        fSampleRateScalingFactor = 1.f;
-        for (size_t k = 0; k < sizeof(scalingFactors)/sizeof(scalingFactors[0]); k++) {
-            if (scalingFactors[k].sampleRate == fActiveSampleRate) {
-                fSampleRateScalingFactor = scalingFactors[k].scalingFactor;
-                break;
-            }
-        }
-
-        //DEBUG("Sample Rate = %f, scaling factor = %f", fActiveSampleRate, fSampleRateScalingFactor);
+        configureFftEngine(iSelectedFftFrameSize, iSelectedOversample, fSelectedSampleRate);
     }
 
     void initialize() { 
-        iFftFrameSize = DFLT_FFT_FRAME_SIZE;
-        iOversample = 4;
-        iStepSize = iFftFrameSize / iOversample;
-        iLatency = iFftFrameSize - iStepSize;
-        iInIndex = iLatency; 
-        window.makeWindow();
-        inBuffer.clear();
-        outBuffer.clear();
-        outputAccumulator.clear();
-        
-        fActiveSampleRate = 0; // force this to be updated on first invocation of process() 44100.0; 
-        iMaxHistoryFrames = 0; // force this to be updated on first invocation of process() 44100.0; 
-        fftFrameHistory.deleteMembers();
-
-        fftFramePool.drain();
-        fftWorkspace.clear();
-        lastPhase.clear();
-        sumPhase.clear();
-        phaseExpected = 2.* M_PI * (float)iStepSize/(float)iFftFrameSize;
-
-        //smbFft.setFrameSize(iFftFrameSize);
-
-        DEBUG("inBuffer.size() = %d", inBuffer.size());
-        DEBUG("outBuffer.size() = %d", outBuffer.size());
-        DEBUG("FftFrameHistory capacity = %d", fftFrameHistory.capacity());
-        DEBUG("FftFrameHistory available = %d", fftFrameHistory.available());
-        //DEBUG("phaseExpected = %f", phaseExpected);
-        DEBUG(" fftTemp,   size %d, numBins %d, address %p", fftTemp.size(), fftTemp.numBins(), fftTemp.values);
-        DEBUG(" InBuffer,  size %d, address %p", inBuffer.size(), inBuffer.values);
-        DEBUG(" OutBuffer, size %d, address %p", outBuffer.size(), outBuffer.values);
-        DEBUG(" Sample Rate = %f", fActiveSampleRate);
+        configureFftEngine_default();
     }
 
     Blur() {
    		config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
-           
-        configParam(LENGTH_ATTENUVERTER_PARAM, -1.f, 1.f, 0.f, "");
+
+		configParam(LENGTH_ATTENUVERTER_PARAM, -1.f, 1.f, 0.f, "");
 		configParam(LENGTH_KNOB_PARAM, 0.f, 1.f, 0.5f, "Length");
 
 		configParam(POSITION_ATTENUVERTER_PARAM, -1.f, 1.f, 0.f, "");
@@ -528,35 +608,69 @@ struct Blur : Module {
 		configParam(BLUR_FREQ_CENTER_ATTENUVERTER_PARAM, -1.f, 1.f, 0.f, "");
 		configParam(BLUR_FREQ_CENTER_KNOB_PARAM, 0.f, 1.f, 0.5f, "Blur Freq Center");
 
-		configParam(BLUR_BIAS_ATTENUVERTER_PARAM, -1.f, 1.f, 0.f, "");
-		configParam(BLUR_BIAS_KNOB_PARAM, 0.f, 1.f, 0.5f, "Blur Bias");
-
 		configParam(BLUR_MIX_ATTENUVERTER_PARAM, -1.f, 1.f, 0.f, "");
 		configParam(BLUR_MIX_KNOB_PARAM, 0.f, 1.f, 1.f, "Blur Mix");
 
-		configParam(PHASE_ATTENUVERTER_PARAM, -1.f, 1.f, 0.f, "");
-		configParam(PHASE_KNOB_PARAM, 0.f, 1.f, 0.f, "Phase");
+		configParam(SEMITONE_BUTTON_PARAM, 0.f, 1.f, 0.f, "Semitone");
+
+		configParam(PITCH_ATTENUVERTER_PARAM, -1.f, 1.f, 0.f, "");
+		configParam(PITCH_KNOB_PARAM, 0.f, 1.f, 0.5f, "Pitch");
 
 		configParam(ROBOT_BUTTON_PARAM, 0.f, 1.f, 0.f, "Robot");
 
 		configParam(FREEZE_ATTENUVERTER_PARAM, -1.f, 1.f, 0.f, "");
-		configParam(FREEZE_KNOB_PARAM, 0.f, 1.f, 0.f, "Frame Dropper");
+		configParam(FREEZE_KNOB_PARAM, 0.f, 1.f, 0.f, "Freeze");
 
+		configParam(GAIN_ATTENUVERTER_PARAM, -1.f, 1.f, 0.f, "");
+		configParam(GAIN_KNOB_PARAM, 0.f, 1.f, 0.5f, "Gain");
+
+        pComplexFftEngine = NULL;
         initialize();
     }
 
     ~Blur() {
         fftFramePool.drain();
         fftFrameHistory.deleteMembers();
+        delete pComplexFftEngine;
+    }
+
+	virtual json_t* dataToJson() override {
+		json_t* rootJ = json_object();
+		json_object_set_new(rootJ, "fftFrameSize", json_integer(iFftFrameSize));
+		json_object_set_new(rootJ, "fftOversample", json_integer(iOversample));
+		return rootJ;
+	}
+
+	virtual void dataFromJson(json_t* rootJ) override {
+		json_t* jsonValue;
+        
+        jsonValue = json_object_get(rootJ, "fftFrameSize");
+		if (jsonValue)
+			iFftFrameSize = json_integer_value(jsonValue);
+
+		jsonValue = json_object_get(rootJ, "fftOversample");
+		if (jsonValue)
+			iOversample = json_integer_value(jsonValue);
+	}
+
+    void resetPhaseHistory() { 
+        lastPhase.clear();
+        sumPhase.clear();
     }
 
 // From Module parent class 
 //    /** Called when the engine sample rate is changed. */
-//    virtual void onSampleRateChange() override {}
+//    virtual void onSampleRateChange() override { }
 //    
-//    /** Called when user clicks Initialize in the module context menu. */
-//    virtual void onReset() override {}
-//    
+    /** Called when user clicks Initialize in the module context menu. */
+    virtual void onReset() override {
+        configureFftEngine_default();
+        bRobot = false;
+        robotTrigger.reset();
+        bSemitone = false;
+        semitoneTrigger.reset();
+    }
+    
 //    /** Called when user clicks Randomize in the module context menu. */
 //    virtual void onRandomize() override {}
 //    
@@ -565,31 +679,44 @@ struct Blur : Module {
 //    
 //    /** Called when the Module is removed from the Engine */
 //    virtual void onRemove() override {}
-    
+
+    // Convert [0,10] range to [0,1]
+    // Return 0 if not connected 
+    inline float getCvInput(int input_id) {
+        if (inputs[input_id].isConnected()) {
+            return (inputs[input_id].getVoltage() / 10.0);
+        }
+        return 0.f;
+    }
+
+
     virtual void process(const ProcessArgs& args) override {
 
-        if (args.sampleRate != fActiveSampleRate) {
-            updateSampleRate(args.sampleRate);
-        }
-
-		if (robotTrigger.process(params[ROBOT_BUTTON_PARAM].getValue() + inputs[ROBOT_CV_INPUT].getVoltage())) {
-			bRobot = !bRobot;
-		}
+        fSelectedSampleRate = args.sampleRate;
 
         float in = inputs[AUDIO_IN_INPUT].getVoltage();
         inBuffer.values[iInIndex] = in;
 
         float out = outBuffer.values[ iInIndex - iLatency ];
-        outputs[AUDIO_OUT_OUTPUT].setVoltage(out);
+
+        float fGain = params[GAIN_KNOB_PARAM].getValue();
+        fGain += params[GAIN_ATTENUVERTER_PARAM].getValue() * getCvInput(GAIN_CV_INPUT);    
+        fGain = clamp(fGain, 0.f, 1.f);
+        fGain = (fGain - 0.5) * 2; // convert to [-1,1]
+        fGain = pow(10.f, fGain * .6f); // +/- 6 db; 
+
+        outputs[AUDIO_OUT_OUTPUT].setVoltage(out * fGain);
 
         iInIndex++;
         if (iInIndex >= iFftFrameSize) {
             iInIndex = iLatency;
+            applyFftConfiguration();
             adjustFrameHistoryLength();
             processFrame();
         }
 
    		lights[ROBOT_LED_LIGHT].value = bRobot;
+   		lights[SEMITONE_LED_LIGHT].value = bSemitone;
     }
 
 
@@ -620,7 +747,7 @@ struct Blur : Module {
             }
 
             // Run FFT Forward 
-            complexFftEngine.fft(fftWorkspace.values, pFftFrame->values);
+            pComplexFftEngine->fft(fftWorkspace.values, pFftFrame->values);
 
             // Remove DC component            
             pFftFrame->values[0] = 0.;
@@ -632,18 +759,14 @@ struct Blur : Module {
                 //    DEBUG(" - after analysis: bin[%d] is %f, %f", k, pFftFrame->values[2*k], pFftFrame->values[2*k+1]);
                 //}
 
-                float real = pFftFrame->values[2*k];
-                float imag = pFftFrame->values[2*k+1];
+                double real = pFftFrame->values[2*k];
+                double imag = pFftFrame->values[2*k+1];
 
-                float magnitude = 2. * sqrt(real*real + imag*imag);
-                float phase = atan2(imag,real);
+                double magnitude = 2. * sqrt(real*real + imag*imag);
+                double phase = atan2(imag,real);
 
                 pFftFrame->values[2*k] = magnitude;
                 pFftFrame->values[2*k+1] = phase;
-
-                //if (k < 8) {
-                //    DEBUG("incoming [%d] mag, phase = %f, %f", k, magnitude, phase);
-                //}
             }
 
             // Push the frame into the history list
@@ -661,12 +784,8 @@ struct Blur : Module {
         // Convert Magnitude/Phase to Real/Imag complex pair
         for (int k = 0; k <= iFftFrameSize/2; k++)
         {
-            //if (k <= 2) {
-            //    DEBUG(" before synthesis: bin[%d] is %f, %f", k, fftTemp.values[2*k], fftTemp.values[2*k+1]);
-            //}
-
-            float magnitude = fftTemp.values[2*k];
-            float phase = fftTemp.values[2*k+1];
+            double magnitude = fftTemp.values[2*k];
+            double phase = fftTemp.values[2*k+1];
 
             // phase = wrapPlusMinusPi(phase);
 
@@ -682,11 +801,11 @@ struct Blur : Module {
         for (int k = iFftFrameSize+2; k < 2*iFftFrameSize; k++) {
             fftTemp.values[k] = 0.;
         }
-        complexFftEngine.ifft(fftTemp.values, fftWorkspace.values);
-        //complexFftEngine.scale(fftWorkspace.values);
+        pComplexFftEngine->ifft(fftTemp.values, fftWorkspace.values);
+        //pComplexFftEngine->scale(fftWorkspace.values);
 
         // Do windowing and add to output accumulator
-        float scale = 1.f / (float) ((iFftFrameSize/2) * iOversample);
+        double scale = 1.0 / double((iFftFrameSize/2) * iOversample);
         scale *= fSampleRateScalingFactor;
         for(int k = 0; k < iFftFrameSize; k++) {
 
@@ -736,21 +855,30 @@ struct Blur : Module {
 
         float fPosition = params[POSITION_KNOB_PARAM].getValue();
         float fSpread = params[BLUR_SPREAD_KNOB_PARAM].getValue();
-        float fPhaseRandomness = params[PHASE_KNOB_PARAM].getValue();
         float fBlurMix = params[BLUR_MIX_KNOB_PARAM].getValue();
         float fBlurFreqWidth = params[BLUR_FREQ_WIDTH_KNOB_PARAM].getValue();
         float fBlurFreqCenter = params[BLUR_FREQ_CENTER_KNOB_PARAM].getValue();
-        float fBlurBias = params[BLUR_BIAS_KNOB_PARAM].getValue();
+        float fPitchShift = params[PITCH_KNOB_PARAM].getValue();
        
+		if (semitoneTrigger.process(params[SEMITONE_BUTTON_PARAM].getValue() + inputs[SEMITONE_CV_INPUT].getVoltage())) {
+			bSemitone = !bSemitone;
+		}
+
+		if (robotTrigger.process(params[ROBOT_BUTTON_PARAM].getValue() + inputs[ROBOT_CV_INPUT].getVoltage())) {
+			bRobot = !bRobot;
+		}
+
         fPosition += params[POSITION_ATTENUVERTER_PARAM].getValue() * getCvInput(POSITION_CV_INPUT);    
         fPosition = clamp(fPosition, 0.f, 1.f);
 
         fSpread += params[BLUR_SPREAD_ATTENUVERTER_PARAM].getValue() * getCvInput(BLUR_SPREAD_CV_INPUT);    
         fSpread = clamp(fSpread, 0.f, 1.f);
+        if (fSpread <= 0.5) {
+            fSpread = (fSpread / 0.5f) * 0.1f; // small increments left of center 
+        } else {
+            fSpread = fSpread - (0.5f - 0.1f);
+        }
         fSpread *= fMaxFrameIndex;
-
-        fPhaseRandomness += params[PHASE_ATTENUVERTER_PARAM].getValue() * getCvInput(PHASE_CV_INPUT);    
-        fPhaseRandomness = clamp(fPhaseRandomness, 0.f, 1.f);
 
         fBlurMix += params[BLUR_MIX_ATTENUVERTER_PARAM].getValue() * getCvInput(BLUR_MIX_CV_INPUT);    
         fBlurMix = clamp(fBlurMix, 0.f, 1.f);
@@ -761,15 +889,16 @@ struct Blur : Module {
         fBlurFreqCenter += params[BLUR_FREQ_CENTER_ATTENUVERTER_PARAM].getValue() * getCvInput(BLUR_FREQ_CENTER_CV_INPUT);    
         fBlurFreqCenter = clamp(fBlurFreqCenter, 0.f, 1.f);
 
-        fBlurBias += params[BLUR_BIAS_ATTENUVERTER_PARAM].getValue() * getCvInput(BLUR_BIAS_CV_INPUT);    
-        fBlurBias = clamp(fBlurBias, 0.f, 1.f);
+        fPitchShift += params[PITCH_ATTENUVERTER_PARAM].getValue() * getCvInput(PITCH_CV_INPUT);    
+        fPitchShift = clamp(fPitchShift, 0.f, 1.f);
 
         //DEBUG("-- Blur Freq Width param = %f", fBlurFreqWidth);
         ///DEBUG("   Blur Freq Center param = %f", fBlurFreqCenter);
         
+        // TODO: do this once on sample rate changes 
         float freqNyquist = fActiveSampleRate * 0.5;
+        double freqPerBin = fActiveSampleRate / double(iFftFrameSize); 
 
-        float freqPerBin = fActiveSampleRate / float(iFftFrameSize); 
         float minExponent = log10(freqPerBin);
         float maxExponent = log10(freqNyquist);
         float exponentRange = maxExponent - minExponent;
@@ -798,41 +927,6 @@ struct Blur : Module {
         int iIndexDry = myFloor(fCursor);
         FftFrame * pFrameDry = fftFrameHistory.peekAt(iIndexDry);
 
-
-/************* EXPERIMENT *************
-// TODO: implement this as freq range and freq center
-// compute bin numbers at top of method 
-        float fModRate = params[MOD_RATE_KNOB_PARAM].getValue();
-        float fModDepth = params[MOD_DEPTH_KNOB_PARAM].getValue();
-
-        float freqNyquist = fActiveSampleRate * 0.5;
-
-        float freqPerBin = fActiveSampleRate / float(iFftFrameSize); 
-        float minExponent = log10(freqPerBin);
-        float maxExponent = log10(freqNyquist);
-        float exponentRange = maxExponent - minExponent;
-
-        float lowerExponent = minExponent + fModRate * exponentRange;
-        float upperExponent = minExponent + fModDepth * exponentRange;
-
-        float binFreq = (float(k) * freqPerBin);
-
-        float binExponent = log10(binFreq);
-
-        if (binExponent < lowerExponent || binExponent > upperExponent) {
-            fSelected = fCursor; // no spread 
-
-
-
-            // experiment -- selected range only
-            // works .. but should this be left to other 'band pass' module 
-            //outputFrame.values[2*k] = 0.f;
-            //outputFrame.values[2*k+1] = 0.f;
-            //continue;
-
-        } 
-************* END *************/
-
         //DEBUG("-- Position = %f", fPosition);
         //DEBUG("   Spread   = %f", fSpread);
         //DEBUG("   Cursor   = %f", fCursor);
@@ -849,7 +943,7 @@ struct Blur : Module {
         for (int k = 0; k <= iFftFrameSize/2; k++) {
 
             // Slide the spread range to always be inside the range of frames in the frame history
-            float fSelected = fCursor + (fBlurBias * fSpread) + (fSpread  * random.generatePlusMinusOne()); 
+            float fSelected = fCursor + (fSpread  * random.generatePlusMinusOne()); 
             if (fSelected < 0.f) {
                 fSelected += fSpread;
             }
@@ -871,7 +965,6 @@ struct Blur : Module {
             if (iIndexAfter >= iNumFrames) {
                 iIndexAfter = iNumFrames - 1;
             }
-
             
             //if (k == 0) {
             //    DEBUG("  [%d] random = %f", k, fRandomValue);
@@ -880,53 +973,179 @@ struct Blur : Module {
             //}
 
             FftFrame * pFrameBefore = fftFrameHistory.peekAt(iIndexBefore);
-            //if (pFrameBefore == NULL) {
-            //    DEBUG("!!! FrameBefore at [%d] is NULL -- num history frames = %d", iIndexBefore, iNumFrames);
-            //    DEBUG(" History Buffer: size = %d", fftFrameHistory.size);
-            //    DEBUG("                 rear  = %d", fftFrameHistory.rear);
-            //    DEBUG("                 front = %d", fftFrameHistory.front);
-            //    DEBUG("            population = %d", fftFrameHistory.population);
-            //    return;
-            //}
-
             FftFrame * pFrameAfter = fftFrameHistory.peekAt(iIndexAfter);
-            //if (pFrameAfter == NULL) {
-            //    DEBUG("!!! FrameAfter at [%d] is NULL -- num history frames = %d", iIndexAfter, iNumFrames);
-            //    DEBUG(" History Buffer: size = %d", fftFrameHistory.size);
-            //    DEBUG("                 rear  = %d", fftFrameHistory.rear);
-            //    DEBUG("                 front = %d", fftFrameHistory.front);
-            //    DEBUG("            population = %d", fftFrameHistory.population);
-            //    return;
-            //}
 
-            int fSelectedWhole = myFloor(fSelected);
-            float fSelectedFractional = fSelected - float(fSelectedWhole);
+            float fSelectedFractional = fSelected - float(myFloor(fSelected));
 
             // Linear interpolate: a + t(b-a) where t is [0,1]
             float fValueBefore = pFrameBefore->values[2*k];
             float fValueAfter = pFrameAfter->values[2*k];        
-            float fValue = fValueBefore + fSelectedFractional * (fValueAfter - fValueBefore);
+            double magn = fValueBefore + fSelectedFractional * (fValueAfter - fValueBefore);
 
             float fPhaseBefore = pFrameBefore->values[2*k+1];
             float fPhaseAfter = pFrameAfter->values[2*k+1];
-            float phase = fPhaseBefore + fSelectedFractional * (fPhaseAfter - fPhaseBefore);
-
-            phase += fPhaseRandomness * random.generatePlusMinusPi();
+            double phase = fPhaseBefore + fSelectedFractional * (fPhaseAfter - fPhaseBefore);
 
             if (bRobot) {
                 phase = 0.f;
-                fValue *= 4.f; // approx scaling factor at 44100.0 sampling rate 
+                magn *= gainForDb(6.); // approx scaling factor at 44100.0 sampling rate 
             }
 
             float fDryMagnitude = pFrameDry->values[2*k];
             float fDryPhase = pFrameDry->values[2*k+1];
+
+            // Apply Blur Mix    
+            magn  = (magn * fBlurMix) + (fDryMagnitude * (1.0 - fBlurMix));
+            phase = (phase * fBlurMix) + (fDryPhase * (1.0 - fBlurMix));            
+
+/********* PITCH SHIFT *******/            
+            // compute the phase delta
+            double tmp = phase - lastPhase.values[k];
+            lastPhase.values[k] = phase;
+
+            // subtract expected phase difference
+            tmp -= float(k) * phaseExpected;
+
+            // map to +/- Pi 
+            tmp = wrapPlusMinusPi(tmp);
+
+            // get deviation from bin frequency
+            tmp = (double(iOversample) * tmp) / (2. * M_PI);
+
+            // compute the k'th partial's true frequency
+            tmp = double(k)*freqPerBin + tmp*freqPerBin;
+
+            anaMagnitude.values[k] = magn;  // magnitude
+            anaFrequency.values[k] = tmp;   // frequency
+        }
+
+        // Perform Pitch Shifting 
+
+        /// Semitone 
+        if (bSemitone) {
+            int semitone; 
+            // convert [-1..1] -> [-36..36]
+            fPitchShift = (fPitchShift - 0.5f) * 2.f;  // -1..1
+            semitone = int(fPitchShift * 36.0); 
+            fPitchShift = pow(2.0, double(semitone)/12.0);
+        }
+        else
+        {
+            fPitchShift *= 2.f;  // 0 .. 1 .. 2    
+            //if (fPitchShift > 1.0) {
+            //    fPitchShift = 1.0 + ((fPitchShift - 1.f) * 3.f);  // 0 .. 1..2..3    
+            //}
+        }
+
+    	synMagnitude.clear();
+        synFrequency.clear();
+        for (int k = 0; k <= iFftFrameSize/2; k++) { 
+			int index = k*fPitchShift;
+			if (index <= iFftFrameSize/2) { 
+				synMagnitude.values[index] += anaMagnitude.values[k];
+				synFrequency.values[index] = anaFrequency.values[k] * fPitchShift; 
+			} 
+		}
+
+        // Synthesize the shifted pitches into outbound FFT frame 
+        for (int k = 0; k <= iFftFrameSize/2; k++) { 
+
+            double magn = synMagnitude.values[k]; // magnitude
+            double tmp = synFrequency.values[k];  // true frequency 
+
+            // subtract bin mid frequency 
+            tmp -= double(k) * freqPerBin;
+
+            // get bin deviation from freq deviation
+            tmp /= freqPerBin;
+
+            // take oversample into account
+            tmp = 2.f * M_PI * tmp / double(iOversample);
+
+            // add the overlap phase advance back in 
+            tmp += double(k) * phaseExpected;
+
+            // accumulate delta phase to get bin phase
+            sumPhase.values[k] += tmp;
+            double phase = sumPhase.values[k];
+
+// EXPERIMENT 
+//lastPhase.values[k] = phase;
+
+/********* End PITCH SHIFT *******/            
+
+            //float fDryMagnitude = pFrameDry->values[2*k];
+            //float fDryPhase = pFrameDry->values[2*k+1];
     
-            outputFrame.values[2*k] = (fValue * fBlurMix) + (fDryMagnitude * (1.0 - fBlurMix));
-            outputFrame.values[2*k+1] = (phase * fBlurMix) + (fDryPhase * (1.0 - fBlurMix));            
+            //outputFrame.values[2*k] = (fValue * fBlurMix) + (fDryMagnitude * (1.0 - fBlurMix));
+            //outputFrame.values[2*k+1] = (phase * fBlurMix) + (fDryPhase * (1.0 - fBlurMix));            
+
+            outputFrame.values[2*k] = magn;
+            outputFrame.values[2*k+1] = phase;            
         }        
     }
+
 };
 
+struct FftSizeSubMenu : MenuItem {
+	Blur * module;
+
+    struct FFTSizeSubItem : MenuItem {
+		Blur* module;
+		int fftSize;
+		void onAction(const event::Action& e) override {
+            DEBUG("FFT Sub Item .. set FFT Size %d", fftSize);
+ 			module->iSelectedFftFrameSize = fftSize;
+		}
+	};
+
+	Menu *createChildMenu() override {
+		Menu *menu = new Menu;
+
+		std::string fftSizeNames[10] = {"32", "64", "128", "256", "512", "1024", "2048", "4096", "8192", "16384"};
+		for (int i = 0; i < 10; i++) {
+            int fftSize = std::stoi(fftSizeNames[i]);
+			FFTSizeSubItem* fftItem = createMenuItem<FFTSizeSubItem>(fftSizeNames[i]);
+			fftItem->rightText = CHECKMARK(module->iFftFrameSize == fftSize);
+			fftItem->module = module;
+			fftItem->fftSize = fftSize;
+			menu->addChild(fftItem);
+		}
+
+		return menu;
+	}
+
+};
+
+struct OversampleSubMenu : MenuItem {
+	Blur * module;
+
+    struct OversampleSubItem : MenuItem {
+		Blur* module;
+		int oversample;
+		void onAction(const event::Action& e) override {
+            DEBUG("Oversample .. set Oversample %d", oversample);
+			module->iSelectedOversample = oversample;
+		}
+	};
+
+	Menu *createChildMenu() override {
+		Menu *menu = new Menu;
+
+		std::string oversampleNames[5] = {"1", "2", "4", "8", "16"};
+		for (int i = 0; i < 5; i++) {
+            int oversample = std::stoi(oversampleNames[i]);
+			OversampleSubItem* oversampleItem = createMenuItem<OversampleSubItem>(oversampleNames[i]);
+			oversampleItem->rightText = CHECKMARK(module->iOversample == oversample);
+			oversampleItem->module = module;
+			oversampleItem->oversample = oversample;
+			menu->addChild(oversampleItem);
+		}
+
+		return menu;
+	}
+
+};
 
 struct BlurWidget : ModuleWidget {
     BlurWidget(Blur* module) {
@@ -938,42 +1157,71 @@ struct BlurWidget : ModuleWidget {
         addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
         addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(17.804, 13.836)), module, Blur::LENGTH_ATTENUVERTER_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(31.662, 13.836)), module, Blur::LENGTH_KNOB_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(17.804, 23.808)), module, Blur::POSITION_ATTENUVERTER_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(31.662, 23.808)), module, Blur::POSITION_KNOB_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(18.026, 34.471)), module, Blur::BLUR_SPREAD_ATTENUVERTER_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(31.885, 34.471)), module, Blur::BLUR_SPREAD_KNOB_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(17.804, 44.854)), module, Blur::BLUR_MIX_ATTENUVERTER_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(31.662, 44.854)), module, Blur::BLUR_MIX_KNOB_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(17.804, 55.441)), module, Blur::BLUR_FREQ_WIDTH_ATTENUVERTER_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(31.662, 55.441)), module, Blur::BLUR_FREQ_WIDTH_KNOB_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(17.804, 65.863)), module, Blur::BLUR_FREQ_CENTER_ATTENUVERTER_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(31.662, 65.863)), module, Blur::BLUR_FREQ_CENTER_KNOB_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(17.804, 75.959)), module, Blur::BLUR_BIAS_ATTENUVERTER_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(31.915, 75.959)), module, Blur::BLUR_BIAS_KNOB_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(17.804, 85.846)), module, Blur::PHASE_ATTENUVERTER_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(31.662, 85.846)), module, Blur::PHASE_KNOB_PARAM));
-		addParam(createParamCentered<LEDButton>(mm2px(Vec(25.242, 94.413)), module, Blur::ROBOT_BUTTON_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(17.804, 103.205)), module, Blur::FREEZE_ATTENUVERTER_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(31.652, 103.205)), module, Blur::FREEZE_KNOB_PARAM));
+		addParam(createParamCentered<RoundSmallBlackKnob>(mm2px(Vec(17.804, 13.836)), module, Blur::LENGTH_ATTENUVERTER_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(32.841, 13.836)), module, Blur::LENGTH_KNOB_PARAM));
+
+		addParam(createParamCentered<RoundSmallBlackKnob>(mm2px(Vec(17.804, 24.565)), module, Blur::POSITION_ATTENUVERTER_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(32.841, 24.565)), module, Blur::POSITION_KNOB_PARAM));
+
+		addParam(createParamCentered<RoundSmallBlackKnob>(mm2px(Vec(23.625, 34.471)), module, Blur::BLUR_SPREAD_ATTENUVERTER_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(38.662, 34.471)), module, Blur::BLUR_SPREAD_KNOB_PARAM));
+
+		addParam(createParamCentered<RoundSmallBlackKnob>(mm2px(Vec(23.625, 44.719)), module, Blur::BLUR_FREQ_WIDTH_ATTENUVERTER_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(38.662, 44.719)), module, Blur::BLUR_FREQ_WIDTH_KNOB_PARAM));
+
+		addParam(createParamCentered<RoundSmallBlackKnob>(mm2px(Vec(23.625, 55.141)), module, Blur::BLUR_FREQ_CENTER_ATTENUVERTER_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(38.662, 55.141)), module, Blur::BLUR_FREQ_CENTER_KNOB_PARAM));
+
+		addParam(createParamCentered<RoundSmallBlackKnob>(mm2px(Vec(23.625, 65.903)), module, Blur::BLUR_MIX_ATTENUVERTER_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(38.662, 65.903)), module, Blur::BLUR_MIX_KNOB_PARAM));
+
+		addParam(createParamCentered<RoundSmallBlackKnob>(mm2px(Vec(17.804, 77.018)), module, Blur::PITCH_ATTENUVERTER_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(32.841, 77.018)), module, Blur::PITCH_KNOB_PARAM));
+
+		addParam(createParamCentered<LEDButton>(mm2px(Vec(23.905, 84.924)), module, Blur::SEMITONE_BUTTON_PARAM));
+
+		addParam(createParamCentered<LEDButton>(mm2px(Vec(69.314, 86.581)), module, Blur::ROBOT_BUTTON_PARAM));
+
+		addParam(createParamCentered<RoundSmallBlackKnob>(mm2px(Vec(17.804, 95.137)), module, Blur::FREEZE_ATTENUVERTER_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(32.841, 95.137)), module, Blur::FREEZE_KNOB_PARAM));
+
+		addParam(createParamCentered<RoundSmallBlackKnob>(mm2px(Vec(17.804, 105.799)), module, Blur::GAIN_ATTENUVERTER_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(32.841, 105.799)), module, Blur::GAIN_KNOB_PARAM));
 
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(6.356, 13.836)), module, Blur::LENGTH_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(6.356, 23.808)), module, Blur::POSITION_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(6.578, 34.471)), module, Blur::BLUR_SPREAD_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(6.356, 44.854)), module, Blur::BLUR_MIX_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(6.356, 55.441)), module, Blur::BLUR_FREQ_WIDTH_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(6.356, 65.863)), module, Blur::BLUR_FREQ_CENTER_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(6.356, 75.959)), module, Blur::BLUR_BIAS_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(6.356, 85.846)), module, Blur::PHASE_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(12.116, 94.413)), module, Blur::ROBOT_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(6.356, 103.205)), module, Blur::FREEZE_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(8.987, 117.474)), module, Blur::AUDIO_IN_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(6.356, 24.565)), module, Blur::POSITION_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(12.177, 34.471)), module, Blur::BLUR_SPREAD_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(12.177, 44.719)), module, Blur::BLUR_FREQ_WIDTH_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(12.177, 55.141)), module, Blur::BLUR_FREQ_CENTER_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(12.177, 65.903)), module, Blur::BLUR_MIX_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(69.314, 73.96)), module, Blur::ROBOT_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(6.356, 77.018)), module, Blur::PITCH_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(11.784, 84.924)), module, Blur::SEMITONE_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(6.356, 95.137)), module, Blur::FREEZE_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(6.356, 105.799)), module, Blur::GAIN_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(5.812, 117.474)), module, Blur::AUDIO_IN_INPUT));
 
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(62.173, 117.474)), module, Blur::AUDIO_OUT_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(67.464, 117.474)), module, Blur::AUDIO_OUT_OUTPUT));
 
-		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(25.302, 94.413)), module, Blur::ROBOT_LED_LIGHT));
+		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(23.905, 84.924)), module, Blur::SEMITONE_LED_LIGHT));
+		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(69.314, 86.581)), module, Blur::ROBOT_LED_LIGHT));
     }
+
+    virtual void appendContextMenu(Menu* menu) override {
+		Blur * module = dynamic_cast<Blur*>(this->module);
+
+        menu->addChild(new MenuSeparator());
+		menu->addChild(new MenuEntry);
+		menu->addChild(createMenuLabel("FFT Size"));
+
+       FftSizeSubMenu *fftSizeSubMenu = createMenuItem<FftSizeSubMenu>("FFT Size", RIGHT_ARROW);
+		fftSizeSubMenu->module = module;
+		menu->addChild(fftSizeSubMenu);
+
+      OversampleSubMenu *oversampleSubMenu = createMenuItem<OversampleSubMenu>("Oversample", RIGHT_ARROW);
+		oversampleSubMenu->module = module;
+		menu->addChild(oversampleSubMenu);
+	}
 };
 
 
