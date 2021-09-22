@@ -317,7 +317,7 @@ static struct ScalingFactor {
 };
 
 
-inline gainForDb(float dB) {
+inline float gainForDb(float dB) {
     return pow(10, dB * 0.1); // 10^(db/10)
 }
 
