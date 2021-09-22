@@ -1,6 +1,9 @@
 # tcRackModules
 ## Blur
-Usage Hints: 
+
+Blur is a VCV Rack module that does spectral manipulations on incoming audio.
+
+### Usage Hints: 
 
 **Buffer Length** - sets the number of seconds worth of FFT frames to buffer up. Values are 0 .. 10 seconds. (0 seconds is keeping just a single frame in the buffer)
 

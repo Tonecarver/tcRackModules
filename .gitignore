@@ -1,3 +1,7 @@
+build
+dep
+dist
+
 # Prerequisites
 *.d
 
