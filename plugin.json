@@ -1,7 +1,7 @@
 {
   "slug": "Tonecarver",
   "name": "Tonecarver",
-  "version": "1.0.0",
+  "version": "1.0.0a",
   "license": "proprietary",
   "brand": "Tonecarver",
   "author": "Bill Davies",
@@ -20,6 +20,12 @@
       "tags": [
         "spectral"
       ]
+    },
+    {
+      "slug": "Morse",
+      "name": "Morse",
+      "description": "Generate Morse Code gate sequence",
+      "tags": []
     }
   ]
 }

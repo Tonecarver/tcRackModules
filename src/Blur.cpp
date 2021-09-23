@@ -34,14 +34,14 @@ struct DoubleLinkList {
     }
 
     ~DoubleLinkList() {
-        drain();
+        deleteMembers();
     }
 
     int size() const { return numMembers; }
 
     bool isEmpty() const { return pHead == NULL; }
 
-    void drain() { 
+    void deleteMembers() { 
         while (pHead != NULL) {
             T * pItem = pHead;
             pHead = (T*) pHead->pNext;
@@ -147,6 +147,7 @@ class CircularBuffer
             else
             {
                 // Overflow !
+                DEBUG("ERROR: -- Circular buffer OVERFLOW: ptr = %p", pItem);
             }
         }
 
@@ -245,6 +246,11 @@ struct AudioBuffer : public AlignedBuffer {
 
 
 struct Random { 
+    uint32_t x = 123456789;
+    uint32_t y = 362436069;
+    uint32_t z = 521288629;
+    uint32_t w = 88675123;
+    
     float generateZeroToOne() { 
         return (float) xor128() / (float)UINT32_MAX;
     }
@@ -262,10 +268,6 @@ struct Random {
     //}
 
     uint32_t xor128(void) {
-        static uint32_t x = 123456789;
-        static uint32_t y = 362436069;
-        static uint32_t z = 521288629;
-        static uint32_t w = 88675123;
         uint32_t t;
         t = x ^ (x << 11);   
         x = y; y = z; z = w;   
@@ -275,11 +277,11 @@ struct Random {
 
 // from https://www.codeproject.com/tips/700780/fast-floor-ceiling-functions
 inline int myFloor(float fVal) { 
-    return (int)(fVal + 32768.) - 32768;
+    return int(fVal + 32768.) - 32768;
 }
 
 inline int myCeil(float fVal) {
-    return 32768 - (int)(32768. - fVal);
+    return 32768 - int(32768. - fVal);
 }
 
 
@@ -298,24 +300,24 @@ inline float wrapPlusMinusPi(float phase)
 }
 
 // Scaling factors for multiplying the synthesized FFT values
-// Determined emperically 
+// Determined emperically using Sine and Saw waveforms
 // Top Value (5.f) is the range of VCV rack audio signals
-static struct ScalingFactor {
+// BOttom Value is the level of the synthesized FFT output without amplification 
+const struct ScalingFactor {
     float sampleRate;
     float scalingFactor;
 } scalingFactors[] = {
     {  44100.f, 5.f/3.75f },
-    {  48000.f, 5.f/3.75f }, //5.f/3.56f },
-    {  88200.f, 5.f/3.75f }, //5.f/2.50f },
-    {  96000.f, 5.f/3.75f }, //5.f/2.345f },
-    { 176400.f, 5.f/3.75f }, //5.f/1.635f },
-    { 192000.f, 5.f/3.75f }, //5.f/1.575f },
-    { 352800.f, 5.f/3.68f }, //5.f/1.35f },
-    { 384000.f, 5.f/3.62f }, //5.f/1.335f },
-    { 705600.f, 5.f/2.60f }, //5.f/1.28f },
-    { 768000.f, 5.f/2.445f }, //5.f/1.27f },
+    {  48000.f, 5.f/3.75f },
+    {  88200.f, 5.f/3.75f },
+    {  96000.f, 5.f/3.75f },
+    { 176400.f, 5.f/3.75f },
+    { 192000.f, 5.f/3.75f },
+    { 352800.f, 5.f/3.68f },
+    { 384000.f, 5.f/3.62f },
+    { 705600.f, 5.f/2.60f },
+    { 768000.f, 5.f/2.445f },
 };
-
 
 inline float gainForDb(float dB) {
     return pow(10, dB * 0.1); // 10^(db/10)
@@ -333,12 +335,13 @@ inline float gainForDb(float dB) {
 //    return (params[param_idx].getValue() * (inputs[cv_idx].getVoltage()/10.f)); 
 //}
 //
-//inline getInput(int param_idx) { 
-//    return inputs[param_idx]; 
-//}
-//
-//inline getPosition() { 
-//    return clampZeroOne(params[POSITION_KNOB_PARAM].getValue() + getAttenuvert(POSITION_ATTENUVERTER_PARAM, POSITION_CV_INPUT); 
+// Convert [0,10] range to [-1,1]
+// Return 0 if not connected 
+//inline float getBipolarCvInput(int input_id) {
+//    if (inputs[input_id].isConnected()) {
+//        return (inputs[input_id].getVoltage() -5.f) / 5.f;
+//    }
+//    return 0.f;
 //}
 
 struct Blur : Module {
@@ -428,6 +431,7 @@ struct Blur : Module {
 
 	bool bRobot = false;
 	dsp::SchmittTrigger robotTrigger;
+    float fRobotGainAdjustment; 
 
 	bool bSemitone = false;
 	dsp::SchmittTrigger semitoneTrigger;
@@ -438,18 +442,7 @@ struct Blur : Module {
     AlignedBuffer synMagnitude{MAX_FFT_FRAME_SIZE};
     AlignedBuffer synFrequency{MAX_FFT_FRAME_SIZE};
 
-    // Convert [0,10] range to [-1,1]
-    // Return 0 if not connected 
-    //inline float getBipolarCvInput(int input_id) {
-    //    if (inputs[input_id].isConnected()) {
-    //        return (inputs[input_id].getVoltage() -5.f) / 5.f;
-    //    }
-    //    return 0.f;
-    //}
-
-
-    void applyFftConfiguration() {
-        // TODO: consider doing this with single flag - reconfigRequired
+        // TODO: consider using single flag like "reconfigRequired"
         // set that flag AFTER setting the SelectedXXX variable 
         //
         //  menu: 
@@ -464,22 +457,19 @@ struct Blur : Module {
         //       osamp = selected
         //       reconfigure()
         //
-
+    void applyFftConfiguration() {
         bool bConfigurationRequired = false;
 
-// could do this with single if a or b or c check 
+        // TODO: consider using single if (a or b or c) check 
         if (iSelectedFftFrameSize != iFftFrameSize) {
-            //iFftFrameSize = iSelectedFftFrameSize;
             bConfigurationRequired = true;
         } 
 
         if (iSelectedOversample != iOversample) {
-            //iOversample = iSelectedOversample;
             bConfigurationRequired = true;
         } 
 
         if (fSelectedSampleRate != fActiveSampleRate) {
-            //fActiveSampleRate = fSelectedSampleRate;
             bConfigurationRequired = true;
         }
 
@@ -518,7 +508,7 @@ struct Blur : Module {
         outBuffer.clear();
         outputAccumulator.clear();
         fftFrameHistory.deleteMembers();
-        fftFramePool.drain();
+        fftFramePool.deleteMembers();
         fftWorkspace.clear();
         lastPhase.clear();
         sumPhase.clear();
@@ -527,6 +517,8 @@ struct Blur : Module {
             delete pComplexFftEngine;
         }
         pComplexFftEngine = new rack::dsp::ComplexFFT(iFftFrameSize);
+
+        fRobotGainAdjustment = gainForDb(4.8f); 
 
         DEBUG("--- Initialize FFT ---");
         DEBUG("inBuffer.size() = %d", inBuffer.size());
@@ -629,7 +621,7 @@ struct Blur : Module {
     }
 
     ~Blur() {
-        fftFramePool.drain();
+        fftFramePool.deleteMembers();
         fftFrameHistory.deleteMembers();
         delete pComplexFftEngine;
     }
@@ -873,11 +865,16 @@ struct Blur : Module {
 
         fSpread += params[BLUR_SPREAD_ATTENUVERTER_PARAM].getValue() * getCvInput(BLUR_SPREAD_CV_INPUT);    
         fSpread = clamp(fSpread, 0.f, 1.f);
-        if (fSpread <= 0.5) {
-            fSpread = (fSpread / 0.5f) * 0.1f; // small increments left of center 
-        } else {
-            fSpread = fSpread - (0.5f - 0.1f);
-        }
+        //if (fSpread <= 0.5) {
+        //    fSpread = (fSpread / 0.5f) * 0.1f; // small increments left of center 
+        //} else {
+        //    fSpread = fSpread - (0.5f - 0.1f);
+        //}
+
+        fSpread += params[BLUR_SPREAD_ATTENUVERTER_PARAM].getValue() * getCvInput(BLUR_SPREAD_CV_INPUT);    
+        fSpread = clamp(fSpread, 0.f, 1.f);
+        fSpread = std::pow(fSpread,3.0f);
+
         fSpread *= fMaxFrameIndex;
 
         fBlurMix += params[BLUR_MIX_ATTENUVERTER_PARAM].getValue() * getCvInput(BLUR_MIX_CV_INPUT);    
@@ -892,10 +889,7 @@ struct Blur : Module {
         fPitchShift += params[PITCH_ATTENUVERTER_PARAM].getValue() * getCvInput(PITCH_CV_INPUT);    
         fPitchShift = clamp(fPitchShift, 0.f, 1.f);
 
-        //DEBUG("-- Blur Freq Width param = %f", fBlurFreqWidth);
-        ///DEBUG("   Blur Freq Center param = %f", fBlurFreqCenter);
-        
-        // TODO: do this once on sample rate changes 
+        // TODO: do the min/max exponent calculations once on sample rate changes 
         float freqNyquist = fActiveSampleRate * 0.5;
         double freqPerBin = fActiveSampleRate / double(iFftFrameSize); 
 
@@ -935,10 +929,6 @@ struct Blur : Module {
         //DEBUG("                   front = %d", fftFrameHistory.front);
         //DEBUG("              population = %d", fftFrameHistory.population);
         //DEBUG("-- outputFrame (size, numBins) = (%d, %d)", outputFrame.size(), outputFrame.numBins());
-
-        // DEBUG 
-        //memcpy(outputFrame.values, fftFrameHistory.peekAt(0)->values, outputFrame.size() * sizeof(float)); // TODO: DEBUG -- delete this 
-        //return;
 
         for (int k = 0; k <= iFftFrameSize/2; k++) {
 
@@ -988,7 +978,7 @@ struct Blur : Module {
 
             if (bRobot) {
                 phase = 0.f;
-                magn *= gainForDb(6.); // approx scaling factor at 44100.0 sampling rate 
+                magn *= fRobotGainAdjustment; 
             }
 
             float fDryMagnitude = pFrameDry->values[2*k];
@@ -1044,7 +1034,19 @@ struct Blur : Module {
 			if (index <= iFftFrameSize/2) { 
 				synMagnitude.values[index] += anaMagnitude.values[k];
 				synFrequency.values[index] = anaFrequency.values[k] * fPitchShift; 
-			} 
+		} 
+
+/*** TODO: Add option and controls for this frequency "Butterfly" effect ***   
+			int index = k*fPitchShift;
+            if (k <= 50)
+            {
+                index = k*(0.-fPitchShift);
+            }
+			if (index <= iFftFrameSize/2) { 
+				synMagnitude.values[index] += anaMagnitude.values[k];
+				synFrequency.values[index] = anaFrequency.values[k] * fPitchShift; 
+			}
+**/             
 		}
 
         // Synthesize the shifted pitches into outbound FFT frame 
@@ -1069,22 +1071,64 @@ struct Blur : Module {
             sumPhase.values[k] += tmp;
             double phase = sumPhase.values[k];
 
-// EXPERIMENT 
-//lastPhase.values[k] = phase;
-
-/********* End PITCH SHIFT *******/            
-
-            //float fDryMagnitude = pFrameDry->values[2*k];
-            //float fDryPhase = pFrameDry->values[2*k+1];
-    
-            //outputFrame.values[2*k] = (fValue * fBlurMix) + (fDryMagnitude * (1.0 - fBlurMix));
-            //outputFrame.values[2*k+1] = (phase * fBlurMix) + (fDryPhase * (1.0 - fBlurMix));            
+/********* End PITCH SHIFT *******/   
 
             outputFrame.values[2*k] = magn;
             outputFrame.values[2*k+1] = phase;            
         }        
+
+/** EXPERIMENT -- shift/rotate the bins **
+ * This works - but this might not be the place to do the shifting
+        float fShiftAmount = (params[PITCH_KNOB_PARAM].getValue() - 0.5f) * 2.f * float(iFftFrameSize/2);
+        shiftFrame(outputFrame, int(shiftAmount))
+** end EXPERIMENT **/
+
     }
 
+// TODO: consider this 
+//    FftFrame * getEmptyFrame() {
+//        FftFrame * pFrame = fftFramePool.popFront();
+//        if (pFrame == NULL) {
+//            pFrame = new FftFrame(iFftFrameSize);
+//        }
+//        pFrame->clear();
+//        return pFrame;
+//    }
+//
+//    void cacheFrame(FftFrame * pFrame) {
+//        fftFramePool.pushFront(pFrame);
+//    }
+
+    // TODO: Future - this is not called yet 
+    void shiftFrame(FftFrame & sourceFrame, int shiftAmount) {
+
+        FftFrame * pShiftedFrame = fftFramePool.popFront();
+        if (pShiftedFrame == NULL) {
+            pShiftedFrame = new FftFrame(iFftFrameSize);
+        }
+        pShiftedFrame->clear();
+
+        // leave bins 0 and fftFrameSize/2 alone 
+        for (int k = 1; k < iFftFrameSize/2; k++) {
+            int targetBin = k + shiftAmount;
+            if (targetBin <= 0) {
+                targetBin += iFftFrameSize/2;
+            }
+            if (targetBin >= iFftFrameSize/2) {
+                targetBin -= iFftFrameSize/2;
+            }
+            pShiftedFrame->values[2*targetBin] += sourceFrame.values[2*k];
+            pShiftedFrame->values[2*targetBin+1] += sourceFrame.values[2*k+1];
+        }
+
+        for (int k = 1; k < iFftFrameSize/2; k++) {
+            sourceFrame.values[2*k] = pShiftedFrame->values[2*k];
+            sourceFrame.values[2*k+1] = pShiftedFrame->values[2*k+1];
+        }
+
+        fftFramePool.pushFront(pShiftedFrame);
+
+    }
 };
 
 struct FftSizeSubMenu : MenuItem {
