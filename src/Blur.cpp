@@ -12,6 +12,19 @@ const int DFLT_FFT_FRAME_SIZE = 2048;
 //const int DFLT_FFT_FRAME_SIZE = 256;
 //const int DFLT_FFT_FRAME_SIZE = 32;
 
+const int MIN_HISTORY_FRAMES = 2; // allow for minimum blur
+const int MAX_HISTORY_FRAMES = 10000; 
+
+const float MAX_HISTORY_SECONDS = 20;
+
+// Tooltip formatters 
+struct LengthParamQuantity;
+struct PositionParamQuantity;
+struct FreqCenterParamQuantity;
+struct FreqWidthParamQuantity;
+struct PitchShiftParamQuantity; 
+struct GainParamQuantity; 
+
 struct ListNode {
     struct ListNode * pNext;
     struct ListNode * pPrev;
@@ -118,8 +131,8 @@ class CircularBuffer
     public:
         CircularBuffer(size_t size) 
         {
-            this->size = size;
-            data = new T*[size];
+            data = allocateCapacity(size);
+            capacity = int(size);
             front = 1;
             rear = 0;
             population = 0;
@@ -127,21 +140,30 @@ class CircularBuffer
 
         ~CircularBuffer()
         {
+            deleteMembers();
             delete[] data;
         }
 
-        bool isFull() const { return population == size; }
+        bool isFull() const { return population == capacity; }
         bool isEmpty() const { return population == 0; }
-        int  capacity() const { return size; }
-        int  available() const { return size - population; }
+        int  getCapacity() const { return capacity; }
+        int  getAvailable() const { return capacity - population; }
         int  numMembers() const { return population; }
+
+//        void setCapacity(int capacityDesired) {
+//            if (capacityDesired > capacity) {
+//                growArray(capacityDesired);
+//            } else if (capacityDesired < capacity) {
+//                shrinkArray(capacityDesired);
+//            }
+//        }
 
         void enQueue(T * pItem)
         {
-            if (population < size)
+            if (population < capacity)
             {
                 population++;
-                rear = (rear + 1) % size;
+                rear = (rear + 1) % capacity;
                 data[rear] = pItem;
             }
             else
@@ -158,7 +180,7 @@ class CircularBuffer
                 population--;
                 T * pItem = data[front];
                 data[front] = NULL;
-                front = (front + 1) % size;
+                front = (front + 1) % capacity;
                 return pItem;
             }
             else
@@ -171,7 +193,7 @@ class CircularBuffer
         {
             int idx = (rear - iIndex);
             if (idx < 0) {
-                idx += size;
+                idx += capacity;
             }
             return data[idx];
         }
@@ -186,10 +208,48 @@ class CircularBuffer
 
     private:
         T ** data;
-        int size; // physical capacity
+        int capacity; // physical capacity
         int rear; // index of most recent (newest) entry
         int front;// index of oldest entry
         int population; // number of occupants 
+
+        T ** allocateCapacity(int capacityDesired) {
+            T ** ptr = new T*[capacityDesired];
+            memset(ptr, 0, sizeof(T*) * capacityDesired);
+            return ptr;
+        }
+
+//        void growArray(int capacityDesired) {
+//            T ** new_data = allocateCapacity(capacityDesired);
+//            for (int k = 0; k < capacity; k++) {
+//                new_data[k] = data[k];
+//            }
+//            delete[] data;
+//            data = new_data;
+//            capacity = capacityDesired;
+//        }
+//
+//        void shrinkArray(int capacityDesired) {
+//            // This would be more efficient if the buffer had a 'limit' variable that 
+//            // can be less or equal to capacity. limit would be the maximum gap between the
+//            // front and rear indexes .. or something .. more optimal perhaps but trickier to implement
+//
+//            T ** new_data = allocateCapacity(capacityDesired);
+//
+//            for (int k = 0; k < capacityDesired; k++) {
+//                new_data[k] = deQueue();
+//            }
+//
+//            deleteMembers();
+//            
+//            delete[] data;
+//            data = new_data;
+//            capacity = capacityDesired;
+//            front = 0; 
+//            rear = capacityDesired - 1;
+//            population = capacityDesired;
+//        }
+
 };
 
 struct AlignedBuffer {
@@ -323,6 +383,10 @@ inline float gainForDb(float dB) {
     return pow(10, dB * 0.1); // 10^(db/10)
 }
 
+inline float dbForGain(float gain) {
+    return 10 * log10(gain);
+}
+
 //inline lerp(float a, float b, float fraction) {
 //    return a + fraction * (b - a);
 //}
@@ -393,9 +457,22 @@ struct Blur : Module {
         NUM_LIGHTS
     };
 
+    // Variables for Tooltips 
+    float fHistoryLengthSeconds;
+    float fPositionSeconds;
+    float fFreqCenterHz;
+    float fFreqLowerHz;
+    float fFreqUpperHz;
+    float fPitchShiftTooltipValue;  // set in fillOutputFrame()
+
+
+    // +/- gain for final output level
+    float fOutputGain = 1.0;
+    float fSelectedOutputGain = 1.0;
+
     DoubleLinkList<FftFrame>  fftFramePool;
-    CircularBuffer<FftFrame>  fftFrameHistory{500};
-    int iMaxHistoryFrames;
+    CircularBuffer<FftFrame>  fftFrameHistory{MAX_HISTORY_FRAMES};
+    int iMaxHistoryFrames;  // limit the number of history frames accuulated  
 
     AlignedBuffer window{MAX_FFT_FRAME_SIZE};
     AlignedBuffer inBuffer{MAX_FFT_FRAME_SIZE};
@@ -434,6 +511,7 @@ struct Blur : Module {
     float fRobotGainAdjustment; 
 
 	bool bSemitone = false;
+    int iSemitoneShift = 0; 
 	dsp::SchmittTrigger semitoneTrigger;
 
     AlignedBuffer anaMagnitude{MAX_FFT_FRAME_SIZE};
@@ -493,7 +571,6 @@ struct Blur : Module {
         iLatency = iFftFrameSize - iStepSize;
         iInIndex = iLatency; 
         phaseExpected = 2.* M_PI * double(iStepSize)/double(iFftFrameSize);
-        iMaxHistoryFrames = 500;  // default 
 
         fSampleRateScalingFactor = 1.f;
         for (size_t k = 0; k < sizeof(scalingFactors)/sizeof(scalingFactors[0]); k++) {
@@ -520,54 +597,63 @@ struct Blur : Module {
 
         fRobotGainAdjustment = gainForDb(4.8f); 
 
-        DEBUG("--- Initialize FFT ---");
-        DEBUG("inBuffer.size() = %d", inBuffer.size());
-        DEBUG("outBuffer.size() = %d", outBuffer.size());
-        DEBUG("FftFrameHistory capacity = %d", fftFrameHistory.capacity());
-        DEBUG("FftFrameHistory available = %d", fftFrameHistory.available());
-        //DEBUG("phaseExpected = %f", phaseExpected);
-        DEBUG(" fftTemp,   size %d, numBins %d, address %p", fftTemp.size(), fftTemp.numBins(), fftTemp.values);
-        DEBUG(" InBuffer,  size %d, address %p", inBuffer.size(), inBuffer.values);
-        DEBUG(" OutBuffer, size %d, address %p", outBuffer.size(), outBuffer.values);
-        DEBUG(" Sample Rate = %f", fActiveSampleRate);
+        //DEBUG("--- Initialize FFT ---");
+        //DEBUG("inBuffer.size() = %d", inBuffer.size());
+        //DEBUG("outBuffer.size() = %d", outBuffer.size());
+        //DEBUG("FftFrameHistory capacity = %d", fftFrameHistory.getCapacity());
+        //DEBUG("FftFrameHistory available = %d", fftFrameHistory.getAvailable());
+        ////DEBUG("phaseExpected = %f", phaseExpected);
+        //DEBUG(" fftTemp,   size %d, numBins %d, address %p", fftTemp.size(), fftTemp.numBins(), fftTemp.values);
+        //DEBUG(" InBuffer,  size %d, address %p", inBuffer.size(), inBuffer.values);
+        //DEBUG(" OutBuffer, size %d, address %p", outBuffer.size(), outBuffer.values);
+        //DEBUG(" Sample Rate = %f", fActiveSampleRate);
     }
-
-//    int computeMaxHistoryFrames(float fLengthSeconds) {
-//        float fFramesPerSecond = (float(iOversample) * fActiveSampleRate) / float(iFftFrameSize);
-//
-//        fLengthSeconds = clamp(fLengthSeconds, 0.f, 10.f);  // TODO: constant 
-//        
-//        iMaxHistoryFrames =  myCeil(fFramesPerSecond * fLengthSeconds);
-//        if (iMaxHistoryFrames <= 0) {
-//            iMaxHistoryFrames = 1;
-//        }
-//    } 
 
     // if sample rate changes, drain the history - the values are likely to be noise at the new sample rate 
     // if the length changes, calculate a new max length and drain just enough frames to leave 'length' number in the history
     void adjustFrameHistoryLength() {
-        float fFramesPerSecond = (float(iOversample) * fActiveSampleRate) / float(iFftFrameSize);
 
-        float fLengthSeconds = params[LENGTH_KNOB_PARAM].getValue();
-        fLengthSeconds += params[LENGTH_ATTENUVERTER_PARAM].getValue() * getCvInput(LENGTH_CV_INPUT);    
-        fLengthSeconds = clamp(fLengthSeconds, 0.f, 1.f);
-        fLengthSeconds *= 10.0; // seconds    // TODO: constant 
-        
-        iMaxHistoryFrames =  myCeil(fFramesPerSecond * fLengthSeconds);
-        if (iMaxHistoryFrames <= 0) {
-            iMaxHistoryFrames = 1;
+        float fFramesPerSecond = (float(iOversample) * fActiveSampleRate) / float(iFftFrameSize);
+        if (fFramesPerSecond < 1.f) {
+            fFramesPerSecond = 1.f;
         }
+
+        float fHistoryLength = params[LENGTH_KNOB_PARAM].getValue();
+        fHistoryLength += params[LENGTH_ATTENUVERTER_PARAM].getValue() * getCvInput(LENGTH_CV_INPUT);    
+        fHistoryLength = clamp(fHistoryLength, 0.f, 1.f);
+
+        float fFrameCountLimit = std::min(MAX_HISTORY_SECONDS * fFramesPerSecond, float(fftFrameHistory.getCapacity()));   
         
-        //DEBUG(" Frames per second = %f", fFramesPerSecond);
-        //DEBUG(" Length seconds = %f", fLengthSeconds);
-        //DEBUG(" Max history frames = %d", iMaxHistoryFrames);
+        iMaxHistoryFrames = myCeil(fHistoryLength * fFrameCountLimit);
+        iMaxHistoryFrames = clamp(iMaxHistoryFrames, MIN_HISTORY_FRAMES, fftFrameHistory.getCapacity());
+
+        fHistoryLengthSeconds = float(iMaxHistoryFrames) / fFramesPerSecond;
 
         // Siphon frames from the History to the Pool until the number of history frames
-        // is less than of equal to the max
+        // is less than or equal to the max
         while (fftFrameHistory.numMembers() > iMaxHistoryFrames) {
             FftFrame *pFftFrame = fftFrameHistory.deQueue();
             fftFramePool.pushTail(pFftFrame);
         }
+
+        // Fill history with enough empty frames to reach max history length
+        while (fftFrameHistory.numMembers() < iMaxHistoryFrames) {
+            FftFrame * pFftFrame = fftFramePool.popFront();
+            if (pFftFrame == NULL) {
+                pFftFrame = new FftFrame(iFftFrameSize);
+            }
+            pFftFrame->clear();
+            fftFrameHistory.enQueue(pFftFrame);
+        }
+
+// TODO: if the max history frames exceeds the initial capacity then
+// shrink the actual number of seconds displayed in the tooltip  
+// at 44100.0 with oversample 1 and frames size of 1 the frames-per-second is 44100.0 
+// at 44100.0 with oversample 8 and frame size of 2048 the frames-per-second is 721.9 
+//
+// Clearly the extreme FFT settings and sample rates would swamp memory very quickly
+// - limit the history buffer length to accomodate the extreme settings
+
     }
 
     void configureFftEngine_default() {
@@ -586,35 +672,35 @@ struct Blur : Module {
    		config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
 
 		configParam(LENGTH_ATTENUVERTER_PARAM, -1.f, 1.f, 0.f, "");
-		configParam(LENGTH_KNOB_PARAM, 0.f, 1.f, 0.5f, "Length");
+		configParam<LengthParamQuantity>(LENGTH_KNOB_PARAM, 0.f, 1.f, 0.5f, "Length");
 
 		configParam(POSITION_ATTENUVERTER_PARAM, -1.f, 1.f, 0.f, "");
-		configParam(POSITION_KNOB_PARAM, 0.f, 1.f, 0.f, "Position");
+		configParam<PositionParamQuantity>(POSITION_KNOB_PARAM, 0.f, 1.f, 0.f, "Position");
 
 		configParam(BLUR_SPREAD_ATTENUVERTER_PARAM, -1.f, 1.f, 0.f, "");
 		configParam(BLUR_SPREAD_KNOB_PARAM, 0.f, 1.f, 0.f, "Blur");
 
 		configParam(BLUR_FREQ_WIDTH_ATTENUVERTER_PARAM, -1.f, 1.f, 0.f, "");
-		configParam(BLUR_FREQ_WIDTH_KNOB_PARAM, 0.f, 1.f, 1.f, "Blur Freq Width");
+		configParam<FreqWidthParamQuantity>(BLUR_FREQ_WIDTH_KNOB_PARAM, 0.f, 1.f, 1.f, "Blur Freq Width");
 
 		configParam(BLUR_FREQ_CENTER_ATTENUVERTER_PARAM, -1.f, 1.f, 0.f, "");
-		configParam(BLUR_FREQ_CENTER_KNOB_PARAM, 0.f, 1.f, 0.5f, "Blur Freq Center");
+		configParam<FreqCenterParamQuantity>(BLUR_FREQ_CENTER_KNOB_PARAM, 0.f, 1.f, 0.5f, "Blur Freq Center");
 
 		configParam(BLUR_MIX_ATTENUVERTER_PARAM, -1.f, 1.f, 0.f, "");
-		configParam(BLUR_MIX_KNOB_PARAM, 0.f, 1.f, 1.f, "Blur Mix");
+		configParam(BLUR_MIX_KNOB_PARAM, 0.f, 1.f, 1.f, "Blur Mix", "%", 0.f, 100.f, 0.f);
 
 		configParam(SEMITONE_BUTTON_PARAM, 0.f, 1.f, 0.f, "Semitone");
 
 		configParam(PITCH_ATTENUVERTER_PARAM, -1.f, 1.f, 0.f, "");
-		configParam(PITCH_KNOB_PARAM, 0.f, 1.f, 0.5f, "Pitch");
+		configParam<PitchShiftParamQuantity>(PITCH_KNOB_PARAM, 0.f, 1.f, 0.5f, "Pitch");
 
 		configParam(ROBOT_BUTTON_PARAM, 0.f, 1.f, 0.f, "Robot");
 
 		configParam(FREEZE_ATTENUVERTER_PARAM, -1.f, 1.f, 0.f, "");
-		configParam(FREEZE_KNOB_PARAM, 0.f, 1.f, 0.f, "Freeze");
+		configParam(FREEZE_KNOB_PARAM, 0.f, 1.f, 0.f, "Frame Drop", "%", 0.f, 100.f, 0.f);
 
 		configParam(GAIN_ATTENUVERTER_PARAM, -1.f, 1.f, 0.f, "");
-		configParam(GAIN_KNOB_PARAM, 0.f, 1.f, 0.5f, "Gain");
+		configParam<GainParamQuantity>(GAIN_KNOB_PARAM, 0.f, 1.f, 0.5f, "Gain");
 
         pComplexFftEngine = NULL;
         initialize();
@@ -683,21 +769,32 @@ struct Blur : Module {
 
 
     virtual void process(const ProcessArgs& args) override {
-
         fSelectedSampleRate = args.sampleRate;
 
         float in = inputs[AUDIO_IN_INPUT].getVoltage();
         inBuffer.values[iInIndex] = in;
-
         float out = outBuffer.values[ iInIndex - iLatency ];
 
         float fGain = params[GAIN_KNOB_PARAM].getValue();
         fGain += params[GAIN_ATTENUVERTER_PARAM].getValue() * getCvInput(GAIN_CV_INPUT);    
         fGain = clamp(fGain, 0.f, 1.f);
-        fGain = (fGain - 0.5) * 2; // convert to [-1,1]
-        fGain = pow(10.f, fGain * .6f); // +/- 6 db; 
+        if (fGain != fSelectedOutputGain) { 
+            fSelectedOutputGain = fGain;
 
-        outputs[AUDIO_OUT_OUTPUT].setVoltage(out * fGain);
+            // TODO: for efficiency, only do this computation if the gain value changed 
+            fGain = (fGain - 0.5) * 2; // convert to [-1,1]
+            fOutputGain = pow(10.f, fGain * .6f); // +/- 6 db; 
+        }
+
+        outputs[AUDIO_OUT_OUTPUT].setVoltage(out * fOutputGain);
+
+		if (semitoneTrigger.process(params[SEMITONE_BUTTON_PARAM].getValue() + inputs[SEMITONE_CV_INPUT].getVoltage())) {
+			bSemitone = !bSemitone;
+		}
+
+		if (robotTrigger.process(params[ROBOT_BUTTON_PARAM].getValue() + inputs[ROBOT_CV_INPUT].getVoltage())) {
+			bRobot = !bRobot;
+		}
 
         iInIndex++;
         if (iInIndex >= iFftFrameSize) {
@@ -723,7 +820,7 @@ struct Blur : Module {
                 fftWorkspace.values[2*k] = inBuffer.values[k] * window.values[k];
                 fftWorkspace.values[2*k+1] = 0.;
             }
-
+            
             // TODO: change order to ensure that frames are held somewhere 
             // prevents memory leak if stopped midway
             //   transfer history oldest to pool
@@ -761,14 +858,16 @@ struct Blur : Module {
                 pFftFrame->values[2*k+1] = phase;
             }
 
+            //DEBUG(" inbound frame: history (population, max) = (%d, %d)", fftFrameHistory.numMembers(), iMaxHistoryFrames);
+
             // Push the frame into the history list
             // Purge older frames
-            if (fftFrameHistory.isFull()) {
+            while (fftFrameHistory.numMembers() >= iMaxHistoryFrames) {
                 FftFrame * pOldFrame = fftFrameHistory.deQueue();
                 fftFramePool.pushTail(pOldFrame);
             }
             fftFrameHistory.enQueue(pFftFrame);
-
+            //DEBUG("      enqueued: history (population, max) = (%d, %d)", fftFrameHistory.numMembers(), iMaxHistoryFrames);
         }
 
         fillOutputFrame(fftTemp);
@@ -844,7 +943,8 @@ struct Blur : Module {
         }
 
         float fMaxFrameIndex = float(iNumFrames - 1);
-
+        //DEBUG("-- max frame index = %f", fMaxFrameIndex);
+        
         float fPosition = params[POSITION_KNOB_PARAM].getValue();
         float fSpread = params[BLUR_SPREAD_KNOB_PARAM].getValue();
         float fBlurMix = params[BLUR_MIX_KNOB_PARAM].getValue();
@@ -852,16 +952,11 @@ struct Blur : Module {
         float fBlurFreqCenter = params[BLUR_FREQ_CENTER_KNOB_PARAM].getValue();
         float fPitchShift = params[PITCH_KNOB_PARAM].getValue();
        
-		if (semitoneTrigger.process(params[SEMITONE_BUTTON_PARAM].getValue() + inputs[SEMITONE_CV_INPUT].getVoltage())) {
-			bSemitone = !bSemitone;
-		}
-
-		if (robotTrigger.process(params[ROBOT_BUTTON_PARAM].getValue() + inputs[ROBOT_CV_INPUT].getVoltage())) {
-			bRobot = !bRobot;
-		}
-
         fPosition += params[POSITION_ATTENUVERTER_PARAM].getValue() * getCvInput(POSITION_CV_INPUT);    
         fPosition = clamp(fPosition, 0.f, 1.f);
+
+        // for tooltips
+        fPositionSeconds = fPosition * fHistoryLengthSeconds;
 
         fSpread += params[BLUR_SPREAD_ATTENUVERTER_PARAM].getValue() * getCvInput(BLUR_SPREAD_CV_INPUT);    
         fSpread = clamp(fSpread, 0.f, 1.f);
@@ -900,11 +995,17 @@ struct Blur : Module {
         float fCenterExponent = minExponent + (fBlurFreqCenter * exponentRange);
         fBlurFreqWidth *= exponentRange;
 
+
         float lowerExponent = fCenterExponent - (fBlurFreqWidth * 0.5);
         float upperExponent = lowerExponent + fBlurFreqWidth;
         // conmpute bin indexes
-        float lowerFreq = pow(10, lowerExponent);
-        float upperFreq = pow(10, upperExponent);
+        float lowerFreq = pow(10.f, lowerExponent);
+        float upperFreq = pow(10.f, upperExponent);
+
+        // Tooltips
+        fFreqCenterHz = pow(10.f, fCenterExponent) - (freqPerBin * 0.5f);
+        fFreqLowerHz  = pow(10.f, lowerExponent);
+        fFreqUpperHz  = pow(10.f, upperExponent);
 
         int iLowerBinIndex = myFloor(lowerFreq / freqPerBin);
         int iUpperBinIndex = myFloor(upperFreq / freqPerBin);
@@ -924,11 +1025,14 @@ struct Blur : Module {
         //DEBUG("-- Position = %f", fPosition);
         //DEBUG("   Spread   = %f", fSpread);
         //DEBUG("   Cursor   = %f", fCursor);
-        //DEBUG("   History Buffer: size = %d", fftFrameHistory.size);
+        //DEBUG("   History Buffer: num members = %d", fftFrameHistory.numMembers());
         //DEBUG("                   rear  = %d", fftFrameHistory.rear);
         //DEBUG("                   front = %d", fftFrameHistory.front);
         //DEBUG("              population = %d", fftFrameHistory.population);
         //DEBUG("-- outputFrame (size, numBins) = (%d, %d)", outputFrame.size(), outputFrame.numBins());
+        //DEBUG("   Index Dry = %d", iIndexDry);
+        //DEBUG("   pFrameDry = 0x%p", pFrameDry);
+        //DEBUG("   Index Before, After, Dry, Max  = (%d, %d, %d, %f)", r  = %d", fftFrameHistory.rear);
 
         for (int k = 0; k <= iFftFrameSize/2; k++) {
 
@@ -956,14 +1060,17 @@ struct Blur : Module {
                 iIndexAfter = iNumFrames - 1;
             }
             
-            //if (k == 0) {
-            //    DEBUG("  [%d] random = %f", k, fRandomValue);
+            //if (k < 8) {
+            //    DEBUG("  [%d] ", k);
             //    DEBUG("       Selected = %f", fSelected);
             //    DEBUG("       index (before, after) = (%d, %d)", iIndexBefore, iIndexAfter);
             //}
 
             FftFrame * pFrameBefore = fftFrameHistory.peekAt(iIndexBefore);
             FftFrame * pFrameAfter = fftFrameHistory.peekAt(iIndexAfter);
+
+            //DEBUG("  [%d] pFrameBefore = 0x%p", k, pFrameBefore);
+            //DEBUG("  [%d] pFrameAfter  = 0x%p", k, pFrameAfter);
 
             float fSelectedFractional = fSelected - float(myFloor(fSelected));
 
@@ -1013,11 +1120,10 @@ struct Blur : Module {
 
         /// Semitone 
         if (bSemitone) {
-            int semitone; 
             // convert [-1..1] -> [-36..36]
             fPitchShift = (fPitchShift - 0.5f) * 2.f;  // -1..1
-            semitone = int(fPitchShift * 36.0); 
-            fPitchShift = pow(2.0, double(semitone)/12.0);
+            iSemitoneShift = int(fPitchShift * 36.0); 
+            fPitchShift = pow(2.0, double(iSemitoneShift)/12.0);
         }
         else
         {
@@ -1026,6 +1132,8 @@ struct Blur : Module {
             //    fPitchShift = 1.0 + ((fPitchShift - 1.f) * 3.f);  // 0 .. 1..2..3    
             //}
         }
+
+        fPitchShiftTooltipValue = fPitchShift;
 
     	synMagnitude.clear();
         synFrequency.clear();
@@ -1127,6 +1235,42 @@ struct Blur : Module {
         }
 
         fftFramePool.pushFront(pShiftedFrame);
+    }
+};
+
+
+struct FreqCenterParamQuantity : ParamQuantity {
+    char formattedValue[24];
+
+	std::string getDisplayValueString() override {
+        float hertz = ((Blur*)module)->fFreqCenterHz;
+        if (hertz < 1000.0) {
+            sprintf(formattedValue, "%.3f Hz", hertz);
+        } else {
+            sprintf(formattedValue, "%.3f kHz", hertz * 0.001);
+        }
+        return formattedValue;
+	}
+};
+
+
+struct FreqWidthParamQuantity : ParamQuantity {
+    char formattedValue[36];
+
+	std::string getDisplayValueString() override {
+        char lower[24]; 
+        char upper[24];
+        formatHz(lower, ((Blur*)module)->fFreqLowerHz);
+        formatHz(upper, ((Blur*)module)->fFreqUpperHz);
+        sprintf(formattedValue, "%s .. %s", lower, upper); 
+        return formattedValue;
+	}
+void formatHz(char * buffer, float hertz) {
+        if (hertz < 1000.0) {
+            sprintf(buffer, "%.1f Hz", hertz);
+        } else {
+            sprintf(buffer, "%.3f kHz", hertz * 0.001);
+        }
 
     }
 };
@@ -1138,7 +1282,7 @@ struct FftSizeSubMenu : MenuItem {
 		Blur* module;
 		int fftSize;
 		void onAction(const event::Action& e) override {
-            DEBUG("FFT Sub Item .. set FFT Size %d", fftSize);
+            //DEBUG("FFT Sub Item .. set FFT Size %d", fftSize);
  			module->iSelectedFftFrameSize = fftSize;
 		}
 	};
@@ -1161,6 +1305,26 @@ struct FftSizeSubMenu : MenuItem {
 
 };
 
+struct GainParamQuantity : ParamQuantity {
+    char formattedValue[24];
+
+	std::string getDisplayValueString() override {
+        float fGain = ((Blur*)module)->fOutputGain;
+        sprintf(formattedValue, "%.3f dB", dbForGain(fGain)); 
+        return formattedValue;
+	}
+};
+
+
+struct LengthParamQuantity : ParamQuantity {
+    char formattedValue[24];
+
+	std::string getDisplayValueString() override {
+        sprintf(formattedValue, "%.3f seconds", ((Blur*)module)->fHistoryLengthSeconds);
+        return formattedValue;
+	}
+};
+
 struct OversampleSubMenu : MenuItem {
 	Blur * module;
 
@@ -1168,7 +1332,7 @@ struct OversampleSubMenu : MenuItem {
 		Blur* module;
 		int oversample;
 		void onAction(const event::Action& e) override {
-            DEBUG("Oversample .. set Oversample %d", oversample);
+            //DEBUG("Oversample .. set Oversample %d", oversample);
 			module->iSelectedOversample = oversample;
 		}
 	};
@@ -1188,8 +1352,33 @@ struct OversampleSubMenu : MenuItem {
 
 		return menu;
 	}
-
 };
+
+struct PitchShiftParamQuantity : ParamQuantity {
+    char formattedValue[24];
+
+	std::string getDisplayValueString() override {
+        bool bSemitone    = ((Blur*)module)->bSemitone;
+        if (bSemitone) {
+            int semitones = ((Blur*)module)->iSemitoneShift;
+            sprintf(formattedValue, "%d Semitones", semitones);
+        } else {
+            float fPitchShift = ((Blur*)module)->fPitchShiftTooltipValue;
+            sprintf(formattedValue, "x %.3f", fPitchShift);
+        }
+        return formattedValue;
+	}
+};
+
+struct PositionParamQuantity : ParamQuantity {
+    char formattedValue[24];
+
+	std::string getDisplayValueString() override {
+        sprintf(formattedValue, "%.3f seconds", ((Blur*)module)->fPositionSeconds);
+        return formattedValue;
+	}
+};
+
 
 struct BlurWidget : ModuleWidget {
     BlurWidget(Blur* module) {
