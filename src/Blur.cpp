@@ -24,6 +24,16 @@ struct FreqCenterParamQuantity;
 struct FreqWidthParamQuantity;
 struct PitchShiftParamQuantity; 
 struct GainParamQuantity; 
+struct BlurFreqSelectorParamQuantity;
+struct GainFreqSelectorParamQuantity;
+struct PitchFreqSelectorParamQuantity;
+struct PitchQuantizeSelectorParamQuantity;
+struct MixParamQuantity;
+struct FrameDropParamQuantity;
+struct FreezeParamQuantity;
+struct RobotParamQuantity;
+struct BlurSpreadParamQuantity;
+struct BlurMixParamQuantity;
 
 struct ListNode {
     struct ListNode * pNext;
@@ -387,75 +397,156 @@ inline float dbForGain(float gain) {
     return 10 * log10(gain);
 }
 
-//inline lerp(float a, float b, float fraction) {
-//    return a + fraction * (b - a);
-//}
+bool isOctaveSemitone(int semitone) {
+    switch (semitone) {
+        case -36:
+        case -24:
+        case -12:
+        case 0:
+        case 12:
+        case 24:
+        case 36:
+            return true;
+    }
+    return false;
+}
 
-//inline clampZeroOne(float f) {
-//    return clamp(f, 0.f, 1.f);
-//}
-//
-//inline getAttenuvert(int param_idx, int cv_idx) { 
-//    return (params[param_idx].getValue() * (inputs[cv_idx].getVoltage()/10.f)); 
-//}
-//
-// Convert [0,10] range to [-1,1]
-// Return 0 if not connected 
-//inline float getBipolarCvInput(int input_id) {
-//    if (inputs[input_id].isConnected()) {
-//        return (inputs[input_id].getVoltage() -5.f) / 5.f;
-//    }
-//    return 0.f;
-//}
+bool isFifthSemitone(int semitone) {
+    switch (semitone) {
+        case -36:
+        case -29:
+        case -24:
+        case -17:
+        case -12:
+        case -5:
+        case 0:
+        case 7:
+        case 12:
+        case 19:
+        case 24:
+        case 31:
+        case 36:
+            return true;
+    }
+    return false;
+}
+
+
+// NOTYET 
+struct SelectionCycler { 
+    int numOptions;
+    int dfltOption; 
+    int selected; 
+    Light  ** pLights;
+
+    SelectionCycler(int numOptions, int dfltOption) {
+        this->numOptions = numOptions;
+        this->pLights = new Light * [numOptions];
+        this->selected = dfltOption;
+    }
+
+    ~SelectionCycler() {
+        delete[] pLights;
+    }
+
+    void addLight(int val, Light * pLight) { 
+        pLights[val] = pLight;
+    }   
+
+    int advance() {
+        return selectOption(selected == numOptions - 1 ? 0 : selected + 1);
+    }
+
+    int selectDefault() {
+        return selectOption(dfltOption);
+    }
+
+    int selectOption(int option) {
+        selected = option;
+        for (int k = 0; k < numOptions; k++) {
+            pLights[k]->value = (selected == k);
+        }
+        return selected;
+    }
+};
+
 
 struct Blur : Module {
-    enum ParamIds {
-        LENGTH_ATTENUVERTER_PARAM,
-        LENGTH_KNOB_PARAM,
-        POSITION_ATTENUVERTER_PARAM,
-        POSITION_KNOB_PARAM,
-        BLUR_SPREAD_ATTENUVERTER_PARAM,
-		BLUR_SPREAD_KNOB_PARAM,
-		BLUR_FREQ_WIDTH_ATTENUVERTER_PARAM,
-		BLUR_FREQ_WIDTH_KNOB_PARAM,
-		BLUR_FREQ_CENTER_ATTENUVERTER_PARAM,
-		BLUR_FREQ_CENTER_KNOB_PARAM,
-		BLUR_MIX_ATTENUVERTER_PARAM,
-		BLUR_MIX_KNOB_PARAM,
+	enum ParamIds {
+		HISTORY_LENGTH_PARAM,
+		HISTORY_ATTENUVERTER_PARAM,
+		FREQ_CENTER_PARAM,
+		FREQ_CENTER_ATTENUVERTER_PARAM,
+		POSITION_ATTENUVERTER_PARAM,
+		POSITION_PARAM,
+		FREQ_SPAN_PARAM,
+		FREQ_SPAN_ATTENUVERTER_PARAM,
+		FRAME_DROP_ATTENUVERTER_PARAM,
+		FRAME_DROP_PARAM,
+		FREEZE_PARAM,
+		BLUR_FREQ_SELECTOR_PARAM,
+		PITCH_FREQ_SELECTOR_PARAM,
+		GAIN_FREQ_SELECTOR_PARAM,
+		BLUR_SPREAD_ATTENUVERTER_PARAM,
+		BLUR_SPREAD_PARAM,
+		PITCH_PARAM,
 		PITCH_ATTENUVERTER_PARAM,
-		PITCH_KNOB_PARAM,
-		SEMITONE_BUTTON_PARAM,
-        ROBOT_BUTTON_PARAM,
-		FREEZE_ATTENUVERTER_PARAM,
-        FREEZE_KNOB_PARAM,
+		ROBOT_PARAM,
+		PITCH_QUANTIZE_PARAM,
+		BLUR_MIX_ATTENUVERTER_PARAM,
+		BLUR_MIX_PARAM,
 		GAIN_ATTENUVERTER_PARAM,
-		GAIN_KNOB_PARAM,
-        NUM_PARAMS
-    };
-    enum InputIds {
-        LENGTH_CV_INPUT,
-        POSITION_CV_INPUT,
-   		BLUR_SPREAD_CV_INPUT,
-		BLUR_FREQ_WIDTH_CV_INPUT,
-		BLUR_FREQ_CENTER_CV_INPUT,
-		BLUR_MIX_CV_INPUT,
-		ROBOT_CV_INPUT,
-		PITCH_CV_INPUT,
-		SEMITONE_CV_INPUT,
+		GAIN_PARAM,
+		PHASE_RESET_PARAM,
+		MIX_PARAM,
+		MIX_ATTENUVERTER_PARAM,
+		NUM_PARAMS
+	};
+	enum InputIds {
+		HISTORY_CV_INPUT,
+		FREQ_CENTER_CV_INPUT,
+		POSITION_CV_INPUT,
+		FREQ_SPAN_CV_INPUT,
+		FRAME_DROP_CV_INPUT,
 		FREEZE_CV_INPUT,
+		BLUR_SPREAD_CV_INPUT,
+		PITCH_CV_INPUT,
+		ROBOT_CV_INPUT,
+		BLUR_MIX_CV_INPUT,
 		GAIN_CV_INPUT,
-        AUDIO_IN_INPUT,
-        NUM_INPUTS
-    };
-    enum OutputIds {
-        AUDIO_OUT_OUTPUT,
-        NUM_OUTPUTS
-    };
-    enum LightIds {
-		SEMITONE_LED_LIGHT,
+		AUDIO_IN_INPUT,
+		MIX_CV_INPUT,
+		NUM_INPUTS
+	};
+	enum OutputIds {
+		AUDIO_OUT_OUTPUT,
+		NUM_OUTPUTS
+	};
+	enum LightIds {
+		BLUR_FREQ_INSIDE_LED_LIGHT,
+		PITCH_FREQ_INSIDE_EXCLUSIVE_LED_LIGHT,
+		PITCH_FREQ_INSIDE_LED_LIGHT,
+		GAIN_FREQ_INSIDE_LED_LIGHT,
+		BLUR_FREQ_OUTSIDE_LED_LIGHT,
+		PITCH_FREQ_OUTSIDE_EXCLUSIVE_LED_LIGHT,
+		PITCH_FREQ_OUTSIDE_LED_LIGHT,
+		GAIN_FREQ_OUTSIDE_LED_LIGHT,
+		FREEZE_LED_LIGHT,
+		BLUR_FREQ_ALL_LED_LIGHT,
+		PITCH_FREQ_ALL_LED_LIGHT,
+		GAIN_FREQ_ALL_LED_LIGHT,
+		BLUR_FREQ_SELECTOR_LED_LIGHT,
+		PITCH_FREQ_SELECTOR_LED_LIGHT,
+		GAIN_FREQ_SELECTOR_LED_LIGHT,
 		ROBOT_LED_LIGHT,
-        NUM_LIGHTS
-    };
+		PITCH_QUANT_SELECTOR_LED_LIGHT,
+		PITCH_QUANT_SMOOTH_LED_LIGHT,
+		PITCH_QUANT_SEMITONES_LED_LIGHT,
+		PITCH_QUANT_FIFTHS_LED_LIGHT,
+		PITCH_QUANT_OCTAVE_LED_LIGHT,
+		RESIDUAL_SWITCH_LED_LIGHT,
+		NUM_LIGHTS
+	};
 
     // Variables for Tooltips 
     float fHistoryLengthSeconds;
@@ -463,7 +554,6 @@ struct Blur : Module {
     float fFreqCenterHz;
     float fFreqLowerHz;
     float fFreqUpperHz;
-    float fPitchShiftTooltipValue;  // set in fillOutputFrame()
 
 
     // +/- gain for final output level
@@ -473,6 +563,9 @@ struct Blur : Module {
     DoubleLinkList<FftFrame>  fftFramePool;
     CircularBuffer<FftFrame>  fftFrameHistory{MAX_HISTORY_FRAMES};
     int iMaxHistoryFrames;  // limit the number of history frames accuulated  
+    float fFrameDropProbability; // probabiilty of dropping incoming frames, range [0,1]
+    bool bFreeze; // drop all incoming frames when buffer is frozen
+	dsp::SchmittTrigger freezeTrigger;
 
     AlignedBuffer window{MAX_FFT_FRAME_SIZE};
     AlignedBuffer inBuffer{MAX_FFT_FRAME_SIZE};
@@ -510,15 +603,144 @@ struct Blur : Module {
 	dsp::SchmittTrigger robotTrigger;
     float fRobotGainAdjustment; 
 
-	bool bSemitone = false;
+    // --------------------------------------------------------------------
+    // -- PITCH -- 
+
+    enum PitchQuantizationEnum { 
+        PITCH_QUANT_SMOOTH    = 0, 
+        PITCH_QUANT_SEMITONES = 1, 
+        PITCH_QUANT_FIFTHS    = 2, 
+        PITCH_QUANT_OCTAVES   = 3 }; 
+	
+    dsp::SchmittTrigger pitchQuantizationTrigger;
+    int pitchQuantization = PITCH_QUANT_SMOOTH;
+
     int iSemitoneShift = 0; 
-	dsp::SchmittTrigger semitoneTrigger;
+    float fActivePitchShift;
+
+    void selectNextPitchQuantization() { 
+        setPitchQuantization((pitchQuantization + 1) & 0x03); // % 4
+    }
+
+    void setPitchQuantization(int quantization) {
+        pitchQuantization = quantization;
+        // set lights 
+ 		lights[PITCH_QUANT_SMOOTH_LED_LIGHT].value    = (pitchQuantization == PITCH_QUANT_SMOOTH);
+		lights[PITCH_QUANT_SEMITONES_LED_LIGHT].value = (pitchQuantization == PITCH_QUANT_SEMITONES);
+		lights[PITCH_QUANT_FIFTHS_LED_LIGHT].value    = (pitchQuantization == PITCH_QUANT_FIFTHS);
+		lights[PITCH_QUANT_OCTAVE_LED_LIGHT].value    = (pitchQuantization == PITCH_QUANT_OCTAVES);
+    }
 
     AlignedBuffer anaMagnitude{MAX_FFT_FRAME_SIZE};
     AlignedBuffer anaFrequency{MAX_FFT_FRAME_SIZE};
 
     AlignedBuffer synMagnitude{MAX_FFT_FRAME_SIZE};
     AlignedBuffer synFrequency{MAX_FFT_FRAME_SIZE};
+
+    // -----------------------------------------
+
+
+
+
+
+    // Frequency Isolation
+    float fFreqNyquist;
+    double dFreqPerBin; 
+
+    float fMinExponent;     // 10^x for frequency in center of bin[0]
+    float fCenterExponent;  // 10^x for frequency selected as center of freq range 
+    float fMaxExponent;     // 10^x for frequency in center of bin[iFftFrameSize -1]
+    float fExponentRange;   // maxExponent - minExponent 
+
+    int iFreqLowerBinIndex;  // index of bin at lower end of freq range
+    int iFreqUpperBinIndex;  // index of bin at upper end of freq range
+
+    float fActiveFreqCenter;
+    float fActiveFreqSpan;
+
+    enum BandRangeEnum { 
+        BAND_APPLY_INSIDE  = 0, 
+        BAND_APPLY_OUTSIDE = 1, 
+        BAND_APPLY_ALL     = 2 }; 
+
+    enum ExtendedBandRangeEnum { 
+        BAND_APPLY_INSIDE_ONLY  = 0, // Suppress outside
+        BAND_APPLY_INSIDE_PLUS  = 1, 
+        BAND_APPLY_OUTSIDE_ONLY = 2, // suppress inside 
+        BAND_APPLY_OUTSIDE_PLUS = 3, 
+        BAND_APPLY_FULL_RANGE   = 4 }; 
+
+	dsp::SchmittTrigger blurBandSelectionTrigger;
+	dsp::SchmittTrigger pitchBandSelectionTrigger;
+	dsp::SchmittTrigger gainBandSelectionTrigger;
+
+    int blurBandRange  = BAND_APPLY_ALL;
+    int gainBandRange  = BAND_APPLY_ALL;
+    int pitchBandRange = BAND_APPLY_FULL_RANGE;
+
+    void selectNextBlurBandRange() { 
+        setBlurBandRange(blurBandRange == 2 ? 0 : blurBandRange + 1);
+    }
+
+    void setBlurBandRange(int range) {
+        blurBandRange = range;
+        // set lights 
+ 		lights[BLUR_FREQ_INSIDE_LED_LIGHT].value  = (blurBandRange == BAND_APPLY_INSIDE);
+ 		lights[BLUR_FREQ_OUTSIDE_LED_LIGHT].value = (blurBandRange == BAND_APPLY_OUTSIDE);
+ 		lights[BLUR_FREQ_ALL_LED_LIGHT].value     = (blurBandRange == BAND_APPLY_ALL);
+    }
+
+
+    void selectNextPitchBandRange() { 
+        setPitchBandRange(pitchBandRange == 4 ? 0 : pitchBandRange + 1);
+    }
+
+    void setPitchBandRange(int range) {
+        pitchBandRange = range;
+        // set lights 
+ 		//lights[PITCH_FREQ_INSIDE_EXCLUSIVE_LED_LIGHT].value  = (pitchBandRange == BAND_APPLY_INSIDE_ONLY || pitchBandRange == BAND_APPLY_INSIDE_PLUS);
+ 		//lights[PITCH_FREQ_INSIDE_LED_LIGHT].value            = (pitchBandRange == BAND_APPLY_INSIDE_PLUS);
+ 		//lights[PITCH_FREQ_OUTSIDE_EXCLUSIVE_LED_LIGHT].value = (pitchBandRange == BAND_APPLY_OUTSIDE_ONLY|| pitchBandRange == BAND_APPLY_OUTSIDE_PLUS);
+ 		//lights[PITCH_FREQ_OUTSIDE_LED_LIGHT].value           = (pitchBandRange == BAND_APPLY_OUTSIDE_PLUS);
+ 		//lights[PITCH_FREQ_ALL_LED_LIGHT].value               = (pitchBandRange == BAND_APPLY_FULL_RANGE);
+
+ 		lights[PITCH_FREQ_INSIDE_EXCLUSIVE_LED_LIGHT].value  = (pitchBandRange == BAND_APPLY_INSIDE_ONLY);
+ 		lights[PITCH_FREQ_INSIDE_LED_LIGHT].value            = (pitchBandRange == BAND_APPLY_INSIDE_PLUS);
+ 		lights[PITCH_FREQ_OUTSIDE_EXCLUSIVE_LED_LIGHT].value = (pitchBandRange == BAND_APPLY_OUTSIDE_ONLY);
+ 		lights[PITCH_FREQ_OUTSIDE_LED_LIGHT].value           = (pitchBandRange == BAND_APPLY_OUTSIDE_PLUS);
+ 		lights[PITCH_FREQ_ALL_LED_LIGHT].value               = (pitchBandRange == BAND_APPLY_FULL_RANGE);
+
+    }
+
+    void selectNextGainBandRange() { 
+        setGainBandRange(gainBandRange == 2 ? 0 : gainBandRange + 1);
+    }
+
+    void setGainBandRange(int range) {
+        gainBandRange = range;
+        // set lights 
+ 		lights[GAIN_FREQ_INSIDE_LED_LIGHT].value  = (gainBandRange == BAND_APPLY_INSIDE);
+ 		lights[GAIN_FREQ_OUTSIDE_LED_LIGHT].value = (gainBandRange == BAND_APPLY_OUTSIDE);
+ 		lights[GAIN_FREQ_ALL_LED_LIGHT].value     = (gainBandRange == BAND_APPLY_ALL);
+    }
+
+    // --------------------------------------------------------------------------------
+    //  Phase Reset - zero out phase history to clean up accumulated phase deviations 
+    // --------------------------------------------------------------------------------
+
+	dsp::SchmittTrigger phaseResetTrigger;
+
+    // --------------------------------------------------------------------------------
+
+    float fActiveOutputMix; 
+    float fActiveDryGain; 
+    float fActiveWetGain;
+        
+    // --------------------------------------------------------------------------------
+
+    float fActiveBlurMix; 
+    float fActiveBlurSpread; 
+
 
         // TODO: consider using single flag like "reconfigRequired"
         // set that flag AFTER setting the SelectedXXX variable 
@@ -557,28 +779,44 @@ struct Blur : Module {
     }
 
     void configureFftEngine(int frameSize, int oversample, float sampleRate) { 
-        
-        iFftFrameSize = frameSize;
+
+        if (iFftFrameSize != frameSize) {
+            iFftFrameSize = frameSize;
+            if (pComplexFftEngine != NULL) {
+                delete pComplexFftEngine;
+            }
+            pComplexFftEngine = new rack::dsp::ComplexFFT(iFftFrameSize);
+        }
+
         iOversample = oversample;
-        fActiveSampleRate = sampleRate; 
+
+        if (fActiveSampleRate != sampleRate) {
+            fActiveSampleRate = sampleRate; 
+
+            fFreqNyquist = fActiveSampleRate * 0.5;
+            dFreqPerBin = fActiveSampleRate / double(iFftFrameSize); 
+
+            fMinExponent = log10(dFreqPerBin);
+            fMaxExponent = log10(fFreqNyquist);
+            fExponentRange = fMaxExponent - fMinExponent;
+
+            fSampleRateScalingFactor = 1.f;
+            for (size_t k = 0; k < sizeof(scalingFactors)/sizeof(scalingFactors[0]); k++) {
+                if (scalingFactors[k].sampleRate == fActiveSampleRate) {
+                    fSampleRateScalingFactor = scalingFactors[k].scalingFactor;
+                    break;
+                }
+            }
+        }
 
         iSelectedFftFrameSize = iFftFrameSize;
         iSelectedOversample = iOversample;
         fSelectedSampleRate = fActiveSampleRate; 
 
-
         iStepSize = iFftFrameSize / iOversample;
         iLatency = iFftFrameSize - iStepSize;
         iInIndex = iLatency; 
         phaseExpected = 2.* M_PI * double(iStepSize)/double(iFftFrameSize);
-
-        fSampleRateScalingFactor = 1.f;
-        for (size_t k = 0; k < sizeof(scalingFactors)/sizeof(scalingFactors[0]); k++) {
-            if (scalingFactors[k].sampleRate == fActiveSampleRate) {
-                fSampleRateScalingFactor = scalingFactors[k].scalingFactor;
-                break;
-            }
-        }
 
         window.makeWindow(frameSize);
         inBuffer.clear();
@@ -589,11 +827,6 @@ struct Blur : Module {
         fftWorkspace.clear();
         lastPhase.clear();
         sumPhase.clear();
-      
-        if (pComplexFftEngine != NULL) {
-            delete pComplexFftEngine;
-        }
-        pComplexFftEngine = new rack::dsp::ComplexFFT(iFftFrameSize);
 
         fRobotGainAdjustment = gainForDb(4.8f); 
 
@@ -618,8 +851,8 @@ struct Blur : Module {
             fFramesPerSecond = 1.f;
         }
 
-        float fHistoryLength = params[LENGTH_KNOB_PARAM].getValue();
-        fHistoryLength += params[LENGTH_ATTENUVERTER_PARAM].getValue() * getCvInput(LENGTH_CV_INPUT);    
+        float fHistoryLength = params[HISTORY_LENGTH_PARAM].getValue();
+        fHistoryLength += params[HISTORY_ATTENUVERTER_PARAM].getValue() * getCvInput(HISTORY_CV_INPUT);    
         fHistoryLength = clamp(fHistoryLength, 0.f, 1.f);
 
         float fFrameCountLimit = std::min(MAX_HISTORY_SECONDS * fFramesPerSecond, float(fftFrameHistory.getCapacity()));   
@@ -666,45 +899,57 @@ struct Blur : Module {
 
     void initialize() { 
         configureFftEngine_default();
+        setPitchQuantization(PITCH_QUANT_SMOOTH);  // TODO: make constant for this 
+        setBlurBandRange(BAND_APPLY_INSIDE);    // TODO: make DFLT constants for these 
+        setPitchBandRange(BAND_APPLY_FULL_RANGE);
+        setGainBandRange(BAND_APPLY_ALL);
+        fActivePitchShift = 1.0; // unity 
+        fFrameDropProbability = 0.f; 
+        bFreeze = false; // drop all incoming frames when buffer is frozen
+
+        // these will be computed on the first call into process
+        iFreqLowerBinIndex = 0;  
+        iFreqUpperBinIndex = 0;
+        fActiveFreqCenter = -1.f;  // force a recalculation
+        fActiveFreqSpan = -1.f;    // force a recalculation
+        updateFreqRange();
+
+        fActiveOutputMix = -999.f;  // force a recalculation 
     }
 
-    Blur() {
-   		config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
-
-		configParam(LENGTH_ATTENUVERTER_PARAM, -1.f, 1.f, 0.f, "");
-		configParam<LengthParamQuantity>(LENGTH_KNOB_PARAM, 0.f, 1.f, 0.5f, "Length");
-
-		configParam(POSITION_ATTENUVERTER_PARAM, -1.f, 1.f, 0.f, "");
-		configParam<PositionParamQuantity>(POSITION_KNOB_PARAM, 0.f, 1.f, 0.f, "Position");
-
-		configParam(BLUR_SPREAD_ATTENUVERTER_PARAM, -1.f, 1.f, 0.f, "");
-		configParam(BLUR_SPREAD_KNOB_PARAM, 0.f, 1.f, 0.f, "Blur");
-
-		configParam(BLUR_FREQ_WIDTH_ATTENUVERTER_PARAM, -1.f, 1.f, 0.f, "");
-		configParam<FreqWidthParamQuantity>(BLUR_FREQ_WIDTH_KNOB_PARAM, 0.f, 1.f, 1.f, "Blur Freq Width");
-
-		configParam(BLUR_FREQ_CENTER_ATTENUVERTER_PARAM, -1.f, 1.f, 0.f, "");
-		configParam<FreqCenterParamQuantity>(BLUR_FREQ_CENTER_KNOB_PARAM, 0.f, 1.f, 0.5f, "Blur Freq Center");
-
-		configParam(BLUR_MIX_ATTENUVERTER_PARAM, -1.f, 1.f, 0.f, "");
-		configParam(BLUR_MIX_KNOB_PARAM, 0.f, 1.f, 1.f, "Blur Mix", "%", 0.f, 100.f, 0.f);
-
-		configParam(SEMITONE_BUTTON_PARAM, 0.f, 1.f, 0.f, "Semitone");
-
-		configParam(PITCH_ATTENUVERTER_PARAM, -1.f, 1.f, 0.f, "");
-		configParam<PitchShiftParamQuantity>(PITCH_KNOB_PARAM, 0.f, 1.f, 0.5f, "Pitch");
-
-		configParam(ROBOT_BUTTON_PARAM, 0.f, 1.f, 0.f, "Robot");
-
-		configParam(FREEZE_ATTENUVERTER_PARAM, -1.f, 1.f, 0.f, "");
-		configParam(FREEZE_KNOB_PARAM, 0.f, 1.f, 0.f, "Frame Drop", "%", 0.f, 100.f, 0.f);
-
-		configParam(GAIN_ATTENUVERTER_PARAM, -1.f, 1.f, 0.f, "");
-		configParam<GainParamQuantity>(GAIN_KNOB_PARAM, 0.f, 1.f, 0.5f, "Gain");
-
+	Blur() {
+		config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
+		configParam<LengthParamQuantity>(HISTORY_LENGTH_PARAM, 0.f, 1.f, 0.5f, "Audio History");
+		configParam(HISTORY_ATTENUVERTER_PARAM, -1.f, 1.f, 0.f, "Audio History Attenuverter");
+		configParam<FreqCenterParamQuantity>(FREQ_CENTER_PARAM, 0.f, 1.f, 0.5f, "Freq Band Center");
+		configParam(FREQ_CENTER_ATTENUVERTER_PARAM, -1.f, 1.f, 0.f, "Freq Center Attenuverter");
+		configParam(POSITION_ATTENUVERTER_PARAM, -1.f, 1.f, 0.f, "Position Attenuverter");
+		configParam<PositionParamQuantity>(POSITION_PARAM, 0.f, 1.f, 0.f, "Playback Position");
+		configParam<FreqWidthParamQuantity>(FREQ_SPAN_PARAM, 0.f, 1.f, 1.f, "Freq Band Width");
+		configParam(FREQ_SPAN_ATTENUVERTER_PARAM, -1.f, 1.f, 0.f, "Freq Span Attenuverter");
+		configParam(FRAME_DROP_ATTENUVERTER_PARAM, -1.f, 1.f, 0.f, "Frame Drop Attenuverter");
+		configParam<FrameDropParamQuantity>(FRAME_DROP_PARAM, 0.f, 1.f, 0.f, "Frame Drop Prob");
+		configParam<FreezeParamQuantity>(FREEZE_PARAM, 0.f, 1.f, 0.f, "Freeze");
+		configParam<BlurFreqSelectorParamQuantity>(BLUR_FREQ_SELECTOR_PARAM, 0.f, 1.f, 0.f, "Blur Freq");
+		configParam<PitchFreqSelectorParamQuantity>(PITCH_FREQ_SELECTOR_PARAM, 0.f, 1.f, 0.f, "Pitch Freq");
+		configParam<GainFreqSelectorParamQuantity>(GAIN_FREQ_SELECTOR_PARAM, 0.f, 1.f, 0.f, "Gain Freq");
+		configParam(BLUR_SPREAD_ATTENUVERTER_PARAM, -1.f, 1.f, 0.f, "Blur Spread Attenuverter");
+		configParam<BlurSpreadParamQuantity>(BLUR_SPREAD_PARAM, 0.f, 1.f, 0.f, "Blur Spread");
+		configParam<PitchShiftParamQuantity>(PITCH_PARAM, 0.f, 1.f, 0.5f, "Pitch");
+		configParam(PITCH_ATTENUVERTER_PARAM, -1.f, 1.f, 0.f, "Pitch Attenuverter");
+		configParam<RobotParamQuantity>(ROBOT_PARAM, 0.f, 1.f, 0.f, "Robot");
+		configParam<PitchQuantizeSelectorParamQuantity>(PITCH_QUANTIZE_PARAM, 0.f, 1.f, 0.f, "Pitch Quantize");
+		configParam(BLUR_MIX_ATTENUVERTER_PARAM, -1.f, 1.f, 0.f, "Blur Mix Attenuverter");
+		configParam(BLUR_MIX_PARAM, 0.f, 1.f, 1.f, "Blur Mix", "%", 0.f, 100.f);
+		configParam(GAIN_ATTENUVERTER_PARAM, -1.f, 1.f, 0.f, "Gain Attenuverter");
+		configParam<GainParamQuantity>(GAIN_PARAM, 0.f, 1.f, 0.5f, "Gain");
+		configParam(PHASE_RESET_PARAM, 0.f, 1.f, 0.f, "Phase Reset");
+		configParam<MixParamQuantity>(MIX_PARAM, 0.f, 1.f, 1.f, "Wet/Dry Mix");
+		configParam(MIX_ATTENUVERTER_PARAM, -1.f, 1.f, 0.f, "Mix Attenuverter");
+		
         pComplexFftEngine = NULL;
         initialize();
-    }
+	}
 
     ~Blur() {
         fftFramePool.deleteMembers();
@@ -742,11 +987,32 @@ struct Blur : Module {
 //    
     /** Called when user clicks Initialize in the module context menu. */
     virtual void onReset() override {
+
+        // TODO: this code is amost identical to initialize()
+        //  call one of the other from the other
+
         configureFftEngine_default();
+        
+        setPitchQuantization(PITCH_QUANT_SMOOTH);
+        setBlurBandRange(BAND_APPLY_INSIDE);  // TODO: make DFLT constants for these 
+        setPitchBandRange(BAND_APPLY_FULL_RANGE);
+        setGainBandRange(BAND_APPLY_ALL);
+        pitchQuantizationTrigger.reset();
+        blurBandSelectionTrigger.reset();
+	    pitchBandSelectionTrigger.reset();
+	    gainBandSelectionTrigger.reset();
+        phaseResetTrigger.reset();
+
         bRobot = false;
         robotTrigger.reset();
-        bSemitone = false;
-        semitoneTrigger.reset();
+        //bSemitone = false;
+
+        bFreeze = false;
+        freezeTrigger.reset();
+
+        fActivePitchShift = 1.0; // unity 
+        fActiveOutputMix = 999.0; // force a recalculation
+        fActiveBlurMix = 1.0; 
     }
     
 //    /** Called when user clicks Randomize in the module context menu. */
@@ -771,11 +1037,138 @@ struct Blur : Module {
     virtual void process(const ProcessArgs& args) override {
         fSelectedSampleRate = args.sampleRate;
 
-        float in = inputs[AUDIO_IN_INPUT].getVoltage();
+        float in = inputs[AUDIO_IN_INPUT].getVoltageSum();
+
         inBuffer.values[iInIndex] = in;
         float out = outBuffer.values[ iInIndex - iLatency ];
 
-        float fGain = params[GAIN_KNOB_PARAM].getValue();
+        // TODO: move to separate method
+        float fMix = params[MIX_PARAM].getValue();
+        fMix += params[MIX_ATTENUVERTER_PARAM].getValue() * getCvInput(GAIN_CV_INPUT);    
+        fMix = clamp(fMix, 0.f, 1.f);
+        if (fMix != fActiveOutputMix) {
+            fActiveOutputMix = fMix; 
+            fMix = (fMix -0.5f) * 2.f; // convert to [-1,1]
+            fActiveDryGain = sqrt(0.5f * (1. - fMix)); // equal power law
+            fActiveWetGain = sqrt(0.5f * (1. + fMix)); // equal power law
+        }        
+        
+        outputs[AUDIO_OUT_OUTPUT].setVoltage( (in * fActiveDryGain) + (out * fActiveWetGain) );
+
+		if (pitchQuantizationTrigger.process(params[PITCH_QUANTIZE_PARAM].getValue())) {
+            selectNextPitchQuantization();
+		}
+
+		if (blurBandSelectionTrigger.process(params[BLUR_FREQ_SELECTOR_PARAM].getValue())) {
+            selectNextBlurBandRange();
+		}
+
+		if (pitchBandSelectionTrigger.process(params[PITCH_FREQ_SELECTOR_PARAM].getValue())) {
+            selectNextPitchBandRange();
+		}
+
+		if (gainBandSelectionTrigger.process(params[GAIN_FREQ_SELECTOR_PARAM].getValue())) {
+            selectNextGainBandRange();
+		}
+
+		if (robotTrigger.process(params[ROBOT_PARAM].getValue() + inputs[ROBOT_CV_INPUT].getVoltage())) {
+			bRobot = !bRobot;
+		}
+
+		if (freezeTrigger.process(params[FREEZE_PARAM].getValue() + inputs[FREEZE_CV_INPUT].getVoltage())) {
+			bFreeze = !bFreeze;
+		}
+
+        iInIndex++;
+        if (iInIndex >= iFftFrameSize) {
+            iInIndex = iLatency;
+            if (phaseResetTrigger.process(params[PHASE_RESET_PARAM].getValue())) {
+                resetPhaseHistory();
+            }
+            updateFreqRange();
+            updateGain();
+            applyFftConfiguration();
+            adjustFrameHistoryLength();
+            processFrame();
+        }
+
+   		lights[ROBOT_LED_LIGHT].value = bRobot;
+        lights[FREEZE_LED_LIGHT].value = bFreeze;
+
+        //lights[PITCH_QUANT_SELECTOR_LED_LIGHT].value = pitchQuantLed;
+
+        // TODO: update lights only when selection changes            
+   		// lights[SEMITONE_LED_LIGHT].value = bSemitone;
+    }
+
+    void updateFreqRange() {
+        // TODO: move this outside the frame process ... in the main process() but only recalc 
+        //  if the current values != active values 
+        //      float fActiveFreqCenter
+        //      float fActiveFreqSpan
+
+        // EXPENSIVE PROCESS -- try to move some or all into the frame process section
+
+        float fFreqCenter = params[FREQ_CENTER_PARAM].getValue();
+        float fFreqSpan = params[FREQ_SPAN_PARAM].getValue();
+
+        fFreqSpan += params[FREQ_SPAN_ATTENUVERTER_PARAM].getValue() * getCvInput(FREQ_SPAN_CV_INPUT);    
+        fFreqSpan = clamp(fFreqSpan, 0.f, 1.f);
+
+        fFreqCenter += params[FREQ_CENTER_ATTENUVERTER_PARAM].getValue() * getCvInput(FREQ_CENTER_CV_INPUT);    
+        fFreqCenter = clamp(fFreqCenter, 0.f, 1.f);
+
+        if (fFreqCenter == fActiveFreqCenter && fFreqSpan == fActiveFreqSpan) {
+            return; 
+        }
+
+        fCenterExponent = fMinExponent + (fFreqCenter * fExponentRange);
+        fFreqSpan *= fExponentRange;
+
+        //DEBUG(" - Frequency Range: minExponent %f", fMinExponent);
+        //DEBUG("   Frequency Range: maxExponent %f", fMaxExponent);
+        //DEBUG("   Frequency Range: centerExponent %f", fCenterExponent);
+
+        // Slide the span range to always be inside the 0..Nyquist range
+        float lowerExponent = fCenterExponent - (fFreqSpan * 0.5);
+        if (lowerExponent < fMinExponent) {
+            lowerExponent = fMinExponent;            
+        }
+
+        float upperExponent = lowerExponent + fFreqSpan;
+        if (upperExponent > fMaxExponent) {
+            upperExponent = fMaxExponent;
+            lowerExponent = upperExponent - fFreqSpan;
+        }
+
+        //DEBUG("      lowerExponent %f", lowerExponent);
+        //DEBUG("      upperExponent %f", upperExponent);
+
+        // compute bin indexes
+        float lowerFreq = pow(10.f, lowerExponent);
+        float upperFreq = pow(10.f, upperExponent);
+
+        //DEBUG("      lowerFreq %f", lowerFreq);
+        //DEBUG("      upperFreq %f", upperFreq);
+
+        iFreqLowerBinIndex = myFloor(lowerFreq / dFreqPerBin);
+        iFreqUpperBinIndex = myFloor(upperFreq / dFreqPerBin);
+        iFreqLowerBinIndex = clamp(iFreqLowerBinIndex, 0, iFftFrameSize/2 + 1);
+        iFreqUpperBinIndex = clamp(iFreqUpperBinIndex, 0, iFftFrameSize/2 + 1);
+
+        // Tooltips
+        fFreqCenterHz = pow(10.f, fCenterExponent); ///  - (dFreqPerBin * 0.5f); // b
+        fFreqLowerHz  = float(iFreqLowerBinIndex) * dFreqPerBin;
+        fFreqUpperHz  = float(iFreqUpperBinIndex) * dFreqPerBin;
+
+        //DEBUG("   minExponent, maxExponent = (%f, %f)", minExponent, maxExponent);
+        //DEBUG("   lowerExponent, upperExponent = %f, %f", lowerExponent, upperExponent);
+        //DEBUG("   lowerFreq, upperFreq = %f, %f", lowerFreq, upperFreq);
+        //DEBUG("   lowerBinIndex, upperBinIndex = %d, %d", iLowerBinIndex, iUpperBinIndex);
+    }
+
+    void updateGain() {
+        float fGain = params[GAIN_PARAM].getValue();
         fGain += params[GAIN_ATTENUVERTER_PARAM].getValue() * getCvInput(GAIN_CV_INPUT);    
         fGain = clamp(fGain, 0.f, 1.f);
         if (fGain != fSelectedOutputGain) { 
@@ -783,36 +1176,24 @@ struct Blur : Module {
 
             // TODO: for efficiency, only do this computation if the gain value changed 
             fGain = (fGain - 0.5) * 2; // convert to [-1,1]
-            fOutputGain = pow(10.f, fGain * .6f); // +/- 6 db; 
+            if (fGain < 0.f) {
+                fOutputGain = pow(10.f, fGain * 6.f); // -60 db; 
+            } else {
+                fOutputGain = pow(10.f, fGain * .6f); // +6 db; 
+            }
         }
-
-        outputs[AUDIO_OUT_OUTPUT].setVoltage(out * fOutputGain);
-
-		if (semitoneTrigger.process(params[SEMITONE_BUTTON_PARAM].getValue() + inputs[SEMITONE_CV_INPUT].getVoltage())) {
-			bSemitone = !bSemitone;
-		}
-
-		if (robotTrigger.process(params[ROBOT_BUTTON_PARAM].getValue() + inputs[ROBOT_CV_INPUT].getVoltage())) {
-			bRobot = !bRobot;
-		}
-
-        iInIndex++;
-        if (iInIndex >= iFftFrameSize) {
-            iInIndex = iLatency;
-            applyFftConfiguration();
-            adjustFrameHistoryLength();
-            processFrame();
-        }
-
-   		lights[ROBOT_LED_LIGHT].value = bRobot;
-   		lights[SEMITONE_LED_LIGHT].value = bSemitone;
     }
-
 
     void processFrame() {
 
-        float fFreeze = params[FREEZE_KNOB_PARAM].getValue();
-        bool bAcceptNewFrame = random.generateZeroToOne() > fFreeze; 
+        float fFrameDrop = params[FRAME_DROP_PARAM].getValue();
+
+        fFrameDrop += params[FRAME_DROP_ATTENUVERTER_PARAM].getValue() * getCvInput(FRAME_DROP_CV_INPUT);    
+        fFrameDrop = clamp(fFrameDrop, 0.f, 1.f);
+
+        fFrameDropProbability = fFrameDrop;
+
+        bool bAcceptNewFrame = (!bFreeze) && (random.generateZeroToOne() > fFrameDropProbability); 
 
         if (bAcceptNewFrame) {
             // Apply the window 
@@ -871,7 +1252,8 @@ struct Blur : Module {
         }
 
         fillOutputFrame(fftTemp);
-
+        applyPitchShift(fftTemp);
+        
         // Convert Magnitude/Phase to Real/Imag complex pair
         for (int k = 0; k <= iFftFrameSize/2; k++)
         {
@@ -880,8 +1262,23 @@ struct Blur : Module {
 
             // phase = wrapPlusMinusPi(phase);
 
-            fftTemp.values[2*k]   = magnitude*cos(phase);
-            fftTemp.values[2*k+1] = magnitude*sin(phase);
+            // Apply frequency band constraints 
+            // Disable gain for bins inside or outside the freq range 
+            // depending on the range mode
+            float fGain = fOutputGain;
+            if (gainBandRange == BAND_APPLY_INSIDE) {
+                if (k < iFreqLowerBinIndex || k > iFreqUpperBinIndex) {
+                    fGain = 1.0; // unity
+                }
+            }
+            else if (gainBandRange == BAND_APPLY_OUTSIDE) {
+                if (k >= iFreqLowerBinIndex && k <= iFreqUpperBinIndex) {
+                    fGain = 1.0; // unity
+                }
+            }
+
+            fftTemp.values[2*k]   = magnitude*cos(phase) * fGain;
+            fftTemp.values[2*k+1] = magnitude*sin(phase) * fGain;
         }
 
         // DEBUG("- after Magn/Phase conversion -");
@@ -899,23 +1296,6 @@ struct Blur : Module {
         double scale = 1.0 / double((iFftFrameSize/2) * iOversample);
         scale *= fSampleRateScalingFactor;
         for(int k = 0; k < iFftFrameSize; k++) {
-
-            // ---- This worked at 44100.0 when not converting to magn/phase and back ----
-            //float fOutValue = (fftWorkspace.values[2*k] * scale * window.values[k] * (5.f/1.9f));
-            //// compute tilt factor to even out slight variances in output levels per bin
-            //// bin[0] is 0.07 volts too high 
-            //// bin[iFftFrameSize/2 - 1] is 0.07 volts too low 
-            //// divide the additive factor by the oversampling so that each pass just makes part of the change 
-            //float fTiltFactor = (float(2*k - iFftFrameSize/2) / float(iFftFrameSize/2)) * (0.05f / float(iOversample)); 
-            //if (fOutValue < 0) {
-            //    fOutValue -= fTiltFactor;
-            //}
-            //else { 
-            //    fOutValue += fTiltFactor;
-            //}
-            // ---- 
-
-            //float fOutValue = (fftWorkspace.values[2*k] * scale * window.values[k] * (5.0f/3.75f));
             float fOutValue = (fftWorkspace.values[2*k] * scale * window.values[k]);
             outputAccumulator.values[k] += fOutValue;
         }
@@ -945,77 +1325,28 @@ struct Blur : Module {
         float fMaxFrameIndex = float(iNumFrames - 1);
         //DEBUG("-- max frame index = %f", fMaxFrameIndex);
         
-        float fPosition = params[POSITION_KNOB_PARAM].getValue();
-        float fSpread = params[BLUR_SPREAD_KNOB_PARAM].getValue();
-        float fBlurMix = params[BLUR_MIX_KNOB_PARAM].getValue();
-        float fBlurFreqWidth = params[BLUR_FREQ_WIDTH_KNOB_PARAM].getValue();
-        float fBlurFreqCenter = params[BLUR_FREQ_CENTER_KNOB_PARAM].getValue();
-        float fPitchShift = params[PITCH_KNOB_PARAM].getValue();
-       
+        float fPosition = params[POSITION_PARAM].getValue();
+        float fSpread = params[BLUR_SPREAD_PARAM].getValue();
+        float fBlurMix = params[BLUR_MIX_PARAM].getValue();
+               
         fPosition += params[POSITION_ATTENUVERTER_PARAM].getValue() * getCvInput(POSITION_CV_INPUT);    
         fPosition = clamp(fPosition, 0.f, 1.f);
 
-        // for tooltips
-        fPositionSeconds = fPosition * fHistoryLengthSeconds;
-
+        // Blur Spread 
         fSpread += params[BLUR_SPREAD_ATTENUVERTER_PARAM].getValue() * getCvInput(BLUR_SPREAD_CV_INPUT);    
         fSpread = clamp(fSpread, 0.f, 1.f);
-        //if (fSpread <= 0.5) {
-        //    fSpread = (fSpread / 0.5f) * 0.1f; // small increments left of center 
-        //} else {
-        //    fSpread = fSpread - (0.5f - 0.1f);
-        //}
-
-        fSpread += params[BLUR_SPREAD_ATTENUVERTER_PARAM].getValue() * getCvInput(BLUR_SPREAD_CV_INPUT);    
-        fSpread = clamp(fSpread, 0.f, 1.f);
-        fSpread = std::pow(fSpread,3.0f);
-
+        fSpread = std::pow(fSpread, 3.f);
         fSpread *= fMaxFrameIndex;
 
+        // Blur Mix 
         fBlurMix += params[BLUR_MIX_ATTENUVERTER_PARAM].getValue() * getCvInput(BLUR_MIX_CV_INPUT);    
         fBlurMix = clamp(fBlurMix, 0.f, 1.f);
 
-        fBlurFreqWidth += params[BLUR_FREQ_WIDTH_ATTENUVERTER_PARAM].getValue() * getCvInput(BLUR_FREQ_WIDTH_CV_INPUT);    
-        fBlurFreqWidth = clamp(fBlurFreqWidth, 0.f, 1.f);
+        // for tooltips
+        fActiveBlurMix = fBlurMix; 
+        fActiveBlurSpread = fSpread;
+        fPositionSeconds = fPosition * fHistoryLengthSeconds;
 
-        fBlurFreqCenter += params[BLUR_FREQ_CENTER_ATTENUVERTER_PARAM].getValue() * getCvInput(BLUR_FREQ_CENTER_CV_INPUT);    
-        fBlurFreqCenter = clamp(fBlurFreqCenter, 0.f, 1.f);
-
-        fPitchShift += params[PITCH_ATTENUVERTER_PARAM].getValue() * getCvInput(PITCH_CV_INPUT);    
-        fPitchShift = clamp(fPitchShift, 0.f, 1.f);
-
-        // TODO: do the min/max exponent calculations once on sample rate changes 
-        float freqNyquist = fActiveSampleRate * 0.5;
-        double freqPerBin = fActiveSampleRate / double(iFftFrameSize); 
-
-        float minExponent = log10(freqPerBin);
-        float maxExponent = log10(freqNyquist);
-        float exponentRange = maxExponent - minExponent;
-
-        float fCenterExponent = minExponent + (fBlurFreqCenter * exponentRange);
-        fBlurFreqWidth *= exponentRange;
-
-
-        float lowerExponent = fCenterExponent - (fBlurFreqWidth * 0.5);
-        float upperExponent = lowerExponent + fBlurFreqWidth;
-        // conmpute bin indexes
-        float lowerFreq = pow(10.f, lowerExponent);
-        float upperFreq = pow(10.f, upperExponent);
-
-        // Tooltips
-        fFreqCenterHz = pow(10.f, fCenterExponent) - (freqPerBin * 0.5f);
-        fFreqLowerHz  = pow(10.f, lowerExponent);
-        fFreqUpperHz  = pow(10.f, upperExponent);
-
-        int iLowerBinIndex = myFloor(lowerFreq / freqPerBin);
-        int iUpperBinIndex = myFloor(upperFreq / freqPerBin);
-        iLowerBinIndex = clamp(iLowerBinIndex, 0, iFftFrameSize/2 + 1);
-        iUpperBinIndex = clamp(iUpperBinIndex, 0, iFftFrameSize/2 + 1);
-
-        //DEBUG("   minExponent, maxExponent = (%f, %f)", minExponent, maxExponent);
-        //DEBUG("   lowerExponent, upperExponent = %f, %f", lowerExponent, upperExponent);
-        //DEBUG("   lowerFreq, upperFreq = %f, %f", lowerFreq, upperFreq);
-        //DEBUG("   lowerBinIndex, upperBinIndex = %d, %d", iLowerBinIndex, iUpperBinIndex);
 
         float fCursor = fPosition * fMaxFrameIndex;
 
@@ -1045,8 +1376,18 @@ struct Blur : Module {
                 fSelected -= fMaxFrameIndex;
             }
 
-            if (k < iLowerBinIndex || k > iUpperBinIndex) {
-                fSelected = fCursor; // no spread 
+            // Apply frequency band constraints 
+            // Disable spread for bins inside or outside the freq range 
+            // depending on the range mode
+            if (blurBandRange == BAND_APPLY_INSIDE) {
+                if (k < iFreqLowerBinIndex || k > iFreqUpperBinIndex) {
+                    fSelected = fCursor; // no spread 
+                }
+            }
+            else if (blurBandRange == BAND_APPLY_OUTSIDE) {
+                if (k >= iFreqLowerBinIndex && k <= iFreqUpperBinIndex) {
+                    fSelected = fCursor; // no spread 
+                }
             }
 
             int iIndexBefore = myFloor(fSelected);
@@ -1094,8 +1435,72 @@ struct Blur : Module {
             // Apply Blur Mix    
             magn  = (magn * fBlurMix) + (fDryMagnitude * (1.0 - fBlurMix));
             phase = (phase * fBlurMix) + (fDryPhase * (1.0 - fBlurMix));            
+        
+            outputFrame.values[2*k] = magn;
+            outputFrame.values[2*k+1] = phase;            
+        }
 
-/********* PITCH SHIFT *******/            
+/** EXPERIMENT -- shift/rotate the bins **
+ * This works - but this might not be the place to do the shifting
+        float fShiftAmount = (params[PITCH_PARAM].getValue() - 0.5f) * 2.f * float(iFftFrameSize/2);
+        shiftFrame(outputFrame, int(shiftAmount))
+** end EXPERIMENT **/
+
+    }
+
+    void applyPitchShift(FftFrame & outputFrame) {
+
+        float fPitchShift = params[PITCH_PARAM].getValue();
+        fPitchShift += params[PITCH_ATTENUVERTER_PARAM].getValue() * getCvInput(PITCH_CV_INPUT);    
+        fPitchShift = clamp(fPitchShift, 0.f, 1.f);
+        
+        if (pitchQuantization == PITCH_QUANT_SMOOTH) {
+            fActivePitchShift = fPitchShift *= 2.f;  // 0 .. 1 .. 2    
+            //if (fPitchShift > 1.0) {
+            //    fPitchShift = 1.0 + ((fPitchShift - 1.f) * 3.f);  // 0 .. 1..2..3    
+            //}
+        } else { 
+
+            // apply quantization 
+            // if current semitones not valid for the selected quant type 
+            // then leave fActivePitchShift unchanged 
+
+            // convert [-1..1] -> [-36..36]
+            fPitchShift = (fPitchShift - 0.5f) * 2.f;  // -1..1
+            int candidateSemitoneShift = int(fPitchShift * 36.0); 
+
+            // Quantize
+            if (pitchQuantization == PITCH_QUANT_SEMITONES) {
+                iSemitoneShift = candidateSemitoneShift; 
+                fActivePitchShift = pow(2.0, double(candidateSemitoneShift)/12.0);
+            }
+            else if (pitchQuantization == PITCH_QUANT_FIFTHS) {
+                if (isFifthSemitone(candidateSemitoneShift)) {
+                    iSemitoneShift = candidateSemitoneShift; 
+                    fActivePitchShift = pow(2.0, double(candidateSemitoneShift)/12.0);
+                }
+            }
+            else if (pitchQuantization == PITCH_QUANT_OCTAVES) {
+                if (isOctaveSemitone(candidateSemitoneShift)) {
+                    iSemitoneShift = candidateSemitoneShift; 
+                    fActivePitchShift = pow(2.0, double(candidateSemitoneShift)/12.0);
+                }
+            }
+        }
+
+        //DEBUG(" - Pitch Quant Mode = %d", pitchQuantization);
+        //DEBUG("   Semitones        = %d", iSemitoneShift);
+        //DEBUG("   pitsh shift      = %f", fActivePitchShift);
+
+        if (fActivePitchShift == 1.0) {
+            return;
+        }
+
+        for (int k = 0; k <= iFftFrameSize/2; k++) {
+
+            float magn = outputFrame.values[2*k];
+            float phase = outputFrame.values[2*k+1];
+            
             // compute the phase delta
             double tmp = phase - lastPhase.values[k];
             lastPhase.values[k] = phase;
@@ -1107,39 +1512,73 @@ struct Blur : Module {
             tmp = wrapPlusMinusPi(tmp);
 
             // get deviation from bin frequency
-            tmp = (double(iOversample) * tmp) / (2. * M_PI);
+            tmp = (double(iOversample) * tmp) / (2.0 * M_PI);
 
             // compute the k'th partial's true frequency
-            tmp = double(k)*freqPerBin + tmp*freqPerBin;
+            tmp = double(k)*dFreqPerBin + tmp*dFreqPerBin;
 
             anaMagnitude.values[k] = magn;  // magnitude
             anaFrequency.values[k] = tmp;   // frequency
         }
 
-        // Perform Pitch Shifting 
-
-        /// Semitone 
-        if (bSemitone) {
-            // convert [-1..1] -> [-36..36]
-            fPitchShift = (fPitchShift - 0.5f) * 2.f;  // -1..1
-            iSemitoneShift = int(fPitchShift * 36.0); 
-            fPitchShift = pow(2.0, double(iSemitoneShift)/12.0);
-        }
-        else
-        {
-            fPitchShift *= 2.f;  // 0 .. 1 .. 2    
-            //if (fPitchShift > 1.0) {
-            //    fPitchShift = 1.0 + ((fPitchShift - 1.f) * 3.f);  // 0 .. 1..2..3    
-            //}
-        }
-
-        fPitchShiftTooltipValue = fPitchShift;
+        // TODO: add option for this
+        bool bPitchSuppressUnselected = true;
+        // bool bPitchSuppressUnselected = false;
 
     	synMagnitude.clear();
         synFrequency.clear();
         for (int k = 0; k <= iFftFrameSize/2; k++) { 
-			int index = k*fPitchShift;
-			if (index <= iFftFrameSize/2) { 
+
+            // Apply frequency band constraints 
+            // Disable shift for bins inside or outside the freq range 
+            // depending on the range mode
+
+            float fPitchShift = fActivePitchShift;
+            if (pitchBandRange == BAND_APPLY_INSIDE) {
+                if (k < iFreqLowerBinIndex || k > iFreqUpperBinIndex) {
+                    if (bPitchSuppressUnselected) {
+                        continue;
+                    }
+                    fPitchShift = 1.0;
+                }
+            }
+            else if (pitchBandRange == BAND_APPLY_OUTSIDE) {
+                if (k >= iFreqLowerBinIndex && k <= iFreqUpperBinIndex) {
+                    if (bPitchSuppressUnselected) {
+                        continue;
+                    }
+                    fPitchShift = 1.0;
+                }
+            }
+
+
+            if (pitchBandRange != BAND_APPLY_FULL_RANGE) {
+                bool isInside = (k >= iFreqLowerBinIndex && k <= iFreqUpperBinIndex);
+                if (pitchBandRange == BAND_APPLY_INSIDE_ONLY) {
+                    if (!isInside) {
+                        continue; // suppress this frequency 
+                    }
+                }
+                else if (pitchBandRange == BAND_APPLY_INSIDE_PLUS) {
+                    if (!isInside) {
+                        fPitchShift = 1.0; // leave frequency unshifted 
+                    }
+                }
+                else if (pitchBandRange == BAND_APPLY_OUTSIDE_ONLY) {
+                    if (isInside) {
+                        continue;
+                    }
+                }
+                else if (pitchBandRange == BAND_APPLY_OUTSIDE_PLUS) {
+                    if (isInside) {
+                        fPitchShift = 1.0; // leave frequency unshifted 
+                    }
+                }
+            }
+
+			int index = k * fPitchShift;
+
+        	if (index <= iFftFrameSize/2) { 
 				synMagnitude.values[index] += anaMagnitude.values[k];
 				synFrequency.values[index] = anaFrequency.values[k] * fPitchShift; 
 		} 
@@ -1164,13 +1603,13 @@ struct Blur : Module {
             double tmp = synFrequency.values[k];  // true frequency 
 
             // subtract bin mid frequency 
-            tmp -= double(k) * freqPerBin;
+            tmp -= double(k) * dFreqPerBin;
 
             // get bin deviation from freq deviation
-            tmp /= freqPerBin;
+            tmp /= dFreqPerBin;
 
             // take oversample into account
-            tmp = 2.f * M_PI * tmp / double(iOversample);
+            tmp = 2.0 * M_PI * tmp / double(iOversample);
 
             // add the overlap phase advance back in 
             tmp += double(k) * phaseExpected;
@@ -1179,19 +1618,14 @@ struct Blur : Module {
             sumPhase.values[k] += tmp;
             double phase = sumPhase.values[k];
 
-/********* End PITCH SHIFT *******/   
-
             outputFrame.values[2*k] = magn;
             outputFrame.values[2*k+1] = phase;            
         }        
 
-/** EXPERIMENT -- shift/rotate the bins **
- * This works - but this might not be the place to do the shifting
-        float fShiftAmount = (params[PITCH_KNOB_PARAM].getValue() - 0.5f) * 2.f * float(iFftFrameSize/2);
-        shiftFrame(outputFrame, int(shiftAmount))
-** end EXPERIMENT **/
-
     }
+
+
+
 
 // TODO: consider this 
 //    FftFrame * getEmptyFrame() {
@@ -1210,6 +1644,10 @@ struct Blur : Module {
     // TODO: Future - this is not called yet 
     void shiftFrame(FftFrame & sourceFrame, int shiftAmount) {
 
+        if (shiftAmount == 0) {
+            return;
+        }
+
         FftFrame * pShiftedFrame = fftFramePool.popFront();
         if (pShiftedFrame == NULL) {
             pShiftedFrame = new FftFrame(iFftFrameSize);
@@ -1219,14 +1657,20 @@ struct Blur : Module {
         // leave bins 0 and fftFrameSize/2 alone 
         for (int k = 1; k < iFftFrameSize/2; k++) {
             int targetBin = k + shiftAmount;
-            if (targetBin <= 0) {
-                targetBin += iFftFrameSize/2;
+            //if (targetBin <= 0) {
+            //    targetBin += iFftFrameSize/2;
+            //}
+            //if (targetBin >= iFftFrameSize/2) {
+            //    targetBin -= iFftFrameSize/2;
+            //}
+            //pShiftedFrame->values[2*targetBin] += sourceFrame.values[2*k];
+            //pShiftedFrame->values[2*targetBin+1] += sourceFrame.values[2*k+1];
+
+            // Discard over/under shoots
+            if (targetBin > 0 && targetBin < iFftFrameSize/2) {
+                pShiftedFrame->values[2*targetBin] += sourceFrame.values[2*k];
+                pShiftedFrame->values[2*targetBin+1] += sourceFrame.values[2*k+1];
             }
-            if (targetBin >= iFftFrameSize/2) {
-                targetBin -= iFftFrameSize/2;
-            }
-            pShiftedFrame->values[2*targetBin] += sourceFrame.values[2*k];
-            pShiftedFrame->values[2*targetBin+1] += sourceFrame.values[2*k+1];
         }
 
         for (int k = 1; k < iFftFrameSize/2; k++) {
@@ -1239,13 +1683,83 @@ struct Blur : Module {
 };
 
 
+
+// -------------------------------------------------------
+//  Tooltips 
+// -------------------------------------------------------
+
+const std::string bandRangeNames[3] = {
+    "Inside", 
+    "Outside",
+    "All"
+};
+
+const std::string extendedBandRangeNames[5] = {
+    "Inside Only (Suppress Outside)", 
+    "Inside", 
+    "Outside Only (Suppress Inside)",
+    "Outside",
+    "All"
+};
+
+const std::string pitchQuantizeNames[4] = {
+    "Smooth",
+    "Semitones",
+    "Fifths",
+    "Octaves" 
+};
+
+struct BlurFreqSelectorParamQuantity : ParamQuantity {
+
+	std::string getDisplayValueString() override {
+        return bandRangeNames[ ((Blur*)module)->blurBandRange ];
+	}
+};
+
+struct BlurSpreadParamQuantity : ParamQuantity {
+    char formattedValue[24];
+
+	std::string getDisplayValueString() override {
+        float spread =  ((Blur*)module)->fActiveBlurSpread; // # frames 
+        int numFrames = ((Blur*)module)->iMaxHistoryFrames;
+        float historySeconds = ((Blur*)module)->fHistoryLengthSeconds;
+
+        float spreadPercent = numFrames > 0 ? spread / float(numFrames) : 0.f;
+
+        sprintf(formattedValue, "%.4f seconds", spreadPercent * historySeconds);
+        return formattedValue;
+    }
+};
+
+struct GainFreqSelectorParamQuantity : ParamQuantity {
+
+	std::string getDisplayValueString() override {
+        return bandRangeNames[ ((Blur*)module)->gainBandRange ];
+	}
+};
+
+struct PitchFreqSelectorParamQuantity : ParamQuantity {
+
+	std::string getDisplayValueString() override {
+        return extendedBandRangeNames[ ((Blur*)module)->pitchBandRange ];
+	}
+};
+
+struct PitchQuantizeSelectorParamQuantity : ParamQuantity {
+
+	std::string getDisplayValueString() override {
+        return pitchQuantizeNames[ ((Blur*)module)->pitchQuantization ];
+	}
+};
+
+
 struct FreqCenterParamQuantity : ParamQuantity {
     char formattedValue[24];
 
 	std::string getDisplayValueString() override {
         float hertz = ((Blur*)module)->fFreqCenterHz;
         if (hertz < 1000.0) {
-            sprintf(formattedValue, "%.3f Hz", hertz);
+            sprintf(formattedValue, "%.1f Hz", hertz);
         } else {
             sprintf(formattedValue, "%.3f kHz", hertz * 0.001);
         }
@@ -1305,6 +1819,25 @@ struct FftSizeSubMenu : MenuItem {
 
 };
 
+struct FrameDropParamQuantity : ParamQuantity {
+    char formattedValue[24];
+
+	std::string getDisplayValueString() override {
+        float probability = ((Blur*)module)->fFrameDropProbability;
+        probability = clamp(probability, 0.f, 1.f);
+        sprintf(formattedValue, "%.1f%%", probability * 100.f); 
+        return formattedValue;
+	}
+};
+
+struct FreezeParamQuantity : ParamQuantity {
+
+	std::string getDisplayValueString() override {
+        return ((Blur*)module)->bFreeze ? "frozen" : "off";
+	}
+};
+
+
 struct GainParamQuantity : ParamQuantity {
     char formattedValue[24];
 
@@ -1315,12 +1848,23 @@ struct GainParamQuantity : ParamQuantity {
 	}
 };
 
-
 struct LengthParamQuantity : ParamQuantity {
     char formattedValue[24];
 
 	std::string getDisplayValueString() override {
         sprintf(formattedValue, "%.3f seconds", ((Blur*)module)->fHistoryLengthSeconds);
+        return formattedValue;
+	}
+};
+
+struct MixParamQuantity : ParamQuantity {
+    char formattedValue[24];
+
+	std::string getDisplayValueString() override {
+        int gain = int(((Blur*)module)->fActiveOutputMix * 100.f);
+        int wetGain = clamp(gain, 0, 100);
+        int dryGain = 100 - wetGain;
+        sprintf(formattedValue, "%d%% / %d%%", wetGain, dryGain);
         return formattedValue;
 	}
 };
@@ -1355,17 +1899,27 @@ struct OversampleSubMenu : MenuItem {
 };
 
 struct PitchShiftParamQuantity : ParamQuantity {
-    char formattedValue[24];
+    char formattedValue[36];
 
 	std::string getDisplayValueString() override {
-        bool bSemitone    = ((Blur*)module)->bSemitone;
-        if (bSemitone) {
-            int semitones = ((Blur*)module)->iSemitoneShift;
-            sprintf(formattedValue, "%d Semitones", semitones);
-        } else {
-            float fPitchShift = ((Blur*)module)->fPitchShiftTooltipValue;
-            sprintf(formattedValue, "x %.3f", fPitchShift);
+
+        int quantMode = ((Blur*)module)->pitchQuantization;
+        int semitones = ((Blur*)module)->iSemitoneShift;
+        float pitchShift = ((Blur*)module)->fActivePitchShift;
+        
+        if (quantMode == Blur::PITCH_QUANT_SEMITONES) {
+            sprintf(formattedValue, "%+d Semitones", semitones);            
         }
+        else if (quantMode == Blur::PITCH_QUANT_FIFTHS) {
+            sprintf(formattedValue, "%+d Semitones (by 5ths)", semitones);            
+        }
+        else if (quantMode == Blur::PITCH_QUANT_OCTAVES) {
+            sprintf(formattedValue, "%+d Octaves", semitones / 12);                            
+        }
+        else { // if (quantMode == Blur::PITCH_QUANT_SMOOTH) {
+            sprintf(formattedValue, "x %.3f", pitchShift);
+        }
+
         return formattedValue;
 	}
 };
@@ -1379,66 +1933,91 @@ struct PositionParamQuantity : ParamQuantity {
 	}
 };
 
+struct RobotParamQuantity : ParamQuantity {
+
+	std::string getDisplayValueString() override {
+        return ((Blur*)module)->bRobot ? "on" : "off";
+	}
+};
+
 
 struct BlurWidget : ModuleWidget {
-    BlurWidget(Blur* module) {
-        setModule(module);
-        setPanel(APP->window->loadSvg(asset::plugin(pluginInstance, "res/Blur.svg")));
+	BlurWidget(Blur* module) {
+		setModule(module);
+		setPanel(APP->window->loadSvg(asset::plugin(pluginInstance, "res/Blur.svg")));
 
-        addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
-        addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
-        addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
-        addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
+		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
+		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
-		addParam(createParamCentered<RoundSmallBlackKnob>(mm2px(Vec(17.804, 13.836)), module, Blur::LENGTH_ATTENUVERTER_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(32.841, 13.836)), module, Blur::LENGTH_KNOB_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(28.046, 17.615)), module, Blur::HISTORY_LENGTH_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(17.462, 17.879)), module, Blur::HISTORY_ATTENUVERTER_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(76.16, 17.879)), module, Blur::FREQ_CENTER_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(87.521, 17.879)), module, Blur::FREQ_CENTER_ATTENUVERTER_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(17.462, 29.722)), module, Blur::POSITION_ATTENUVERTER_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(28.046, 29.722)), module, Blur::POSITION_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(76.16, 29.722)), module, Blur::FREQ_SPAN_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(87.521, 29.722)), module, Blur::FREQ_SPAN_ATTENUVERTER_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(17.462, 42.171)), module, Blur::FRAME_DROP_ATTENUVERTER_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(28.046, 42.171)), module, Blur::FRAME_DROP_PARAM));
+		addParam(createParamCentered<LEDButton>(mm2px(Vec(21.398, 52.409)), module, Blur::FREEZE_PARAM));
+		addParam(createParamCentered<LEDButton>(mm2px(Vec(75.174, 59.616)), module, Blur::BLUR_FREQ_SELECTOR_PARAM));
+		addParam(createParamCentered<LEDButton>(mm2px(Vec(85.798, 59.616)), module, Blur::PITCH_FREQ_SELECTOR_PARAM));
+		addParam(createParamCentered<LEDButton>(mm2px(Vec(96.515, 59.616)), module, Blur::GAIN_FREQ_SELECTOR_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(17.2, 68.733)), module, Blur::BLUR_SPREAD_ATTENUVERTER_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(27.783, 68.733)), module, Blur::BLUR_SPREAD_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(76.16, 75.083)), module, Blur::PITCH_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(87.521, 75.083)), module, Blur::PITCH_ATTENUVERTER_PARAM));
+		addParam(createParamCentered<LEDButton>(mm2px(Vec(21.136, 80.529)), module, Blur::ROBOT_PARAM));
+		addParam(createParamCentered<LEDButton>(mm2px(Vec(72.681, 87.078)), module, Blur::PITCH_QUANTIZE_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(17.2, 91.788)), module, Blur::BLUR_MIX_ATTENUVERTER_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(27.783, 91.788)), module, Blur::BLUR_MIX_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(87.521, 102.611)), module, Blur::GAIN_ATTENUVERTER_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(76.16, 102.843)), module, Blur::GAIN_PARAM));
+		addParam(createParamCentered<LEDButton>(mm2px(Vec(41.582, 114.189)), module, Blur::PHASE_RESET_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(76.16, 114.189)), module, Blur::MIX_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(87.521, 114.189)), module, Blur::MIX_ATTENUVERTER_PARAM));
 
-		addParam(createParamCentered<RoundSmallBlackKnob>(mm2px(Vec(17.804, 24.565)), module, Blur::POSITION_ATTENUVERTER_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(32.841, 24.565)), module, Blur::POSITION_KNOB_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(7.408, 17.879)), module, Blur::HISTORY_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(98.369, 17.879)), module, Blur::FREQ_CENTER_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(7.408, 29.722)), module, Blur::POSITION_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(98.369, 29.722)), module, Blur::FREQ_SPAN_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(7.408, 42.171)), module, Blur::FRAME_DROP_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(11.642, 52.409)), module, Blur::FREEZE_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(7.146, 68.733)), module, Blur::BLUR_SPREAD_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(98.369, 75.083)), module, Blur::PITCH_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(11.379, 80.529)), module, Blur::ROBOT_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(7.146, 91.788)), module, Blur::BLUR_MIX_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(98.369, 102.611)), module, Blur::GAIN_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(7.437, 114.189)), module, Blur::AUDIO_IN_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(98.369, 114.189)), module, Blur::MIX_CV_INPUT));
 
-		addParam(createParamCentered<RoundSmallBlackKnob>(mm2px(Vec(23.625, 34.471)), module, Blur::BLUR_SPREAD_ATTENUVERTER_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(38.662, 34.471)), module, Blur::BLUR_SPREAD_KNOB_PARAM));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(23.628, 114.189)), module, Blur::AUDIO_OUT_OUTPUT));
 
-		addParam(createParamCentered<RoundSmallBlackKnob>(mm2px(Vec(23.625, 44.719)), module, Blur::BLUR_FREQ_WIDTH_ATTENUVERTER_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(38.662, 44.719)), module, Blur::BLUR_FREQ_WIDTH_KNOB_PARAM));
-
-		addParam(createParamCentered<RoundSmallBlackKnob>(mm2px(Vec(23.625, 55.141)), module, Blur::BLUR_FREQ_CENTER_ATTENUVERTER_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(38.662, 55.141)), module, Blur::BLUR_FREQ_CENTER_KNOB_PARAM));
-
-		addParam(createParamCentered<RoundSmallBlackKnob>(mm2px(Vec(23.625, 65.903)), module, Blur::BLUR_MIX_ATTENUVERTER_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(38.662, 65.903)), module, Blur::BLUR_MIX_KNOB_PARAM));
-
-		addParam(createParamCentered<RoundSmallBlackKnob>(mm2px(Vec(17.804, 77.018)), module, Blur::PITCH_ATTENUVERTER_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(32.841, 77.018)), module, Blur::PITCH_KNOB_PARAM));
-
-		addParam(createParamCentered<LEDButton>(mm2px(Vec(23.905, 84.924)), module, Blur::SEMITONE_BUTTON_PARAM));
-
-		addParam(createParamCentered<LEDButton>(mm2px(Vec(69.314, 86.581)), module, Blur::ROBOT_BUTTON_PARAM));
-
-		addParam(createParamCentered<RoundSmallBlackKnob>(mm2px(Vec(17.804, 95.137)), module, Blur::FREEZE_ATTENUVERTER_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(32.841, 95.137)), module, Blur::FREEZE_KNOB_PARAM));
-
-		addParam(createParamCentered<RoundSmallBlackKnob>(mm2px(Vec(17.804, 105.799)), module, Blur::GAIN_ATTENUVERTER_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(32.841, 105.799)), module, Blur::GAIN_KNOB_PARAM));
-
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(6.356, 13.836)), module, Blur::LENGTH_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(6.356, 24.565)), module, Blur::POSITION_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(12.177, 34.471)), module, Blur::BLUR_SPREAD_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(12.177, 44.719)), module, Blur::BLUR_FREQ_WIDTH_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(12.177, 55.141)), module, Blur::BLUR_FREQ_CENTER_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(12.177, 65.903)), module, Blur::BLUR_MIX_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(69.314, 73.96)), module, Blur::ROBOT_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(6.356, 77.018)), module, Blur::PITCH_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(11.784, 84.924)), module, Blur::SEMITONE_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(6.356, 95.137)), module, Blur::FREEZE_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(6.356, 105.799)), module, Blur::GAIN_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(5.812, 117.474)), module, Blur::AUDIO_IN_INPUT));
-
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(67.464, 117.474)), module, Blur::AUDIO_OUT_OUTPUT));
-
-		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(23.905, 84.924)), module, Blur::SEMITONE_LED_LIGHT));
-		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(69.314, 86.581)), module, Blur::ROBOT_LED_LIGHT));
-    }
+		addChild(createLightCentered<MediumLight<YellowLight>>(mm2px(Vec(75.174, 45.848)), module, Blur::BLUR_FREQ_INSIDE_LED_LIGHT));
+		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(83.521, 45.848)), module, Blur::PITCH_FREQ_INSIDE_EXCLUSIVE_LED_LIGHT));
+		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(88.073, 45.848)), module, Blur::PITCH_FREQ_INSIDE_LED_LIGHT));
+		addChild(createLightCentered<MediumLight<BlueLight>>(mm2px(Vec(96.485, 45.848)), module, Blur::GAIN_FREQ_INSIDE_LED_LIGHT));
+		addChild(createLightCentered<MediumLight<YellowLight>>(mm2px(Vec(75.174, 49.816)), module, Blur::BLUR_FREQ_OUTSIDE_LED_LIGHT));
+		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(83.521, 49.816)), module, Blur::PITCH_FREQ_OUTSIDE_EXCLUSIVE_LED_LIGHT));
+		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(88.073, 49.816)), module, Blur::PITCH_FREQ_OUTSIDE_LED_LIGHT));
+		addChild(createLightCentered<MediumLight<BlueLight>>(mm2px(Vec(96.485, 49.816)), module, Blur::GAIN_FREQ_OUTSIDE_LED_LIGHT));
+		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(21.398, 52.409)), module, Blur::FREEZE_LED_LIGHT));
+		addChild(createLightCentered<MediumLight<YellowLight>>(mm2px(Vec(75.174, 53.942)), module, Blur::BLUR_FREQ_ALL_LED_LIGHT));
+		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(85.769, 53.942)), module, Blur::PITCH_FREQ_ALL_LED_LIGHT));
+		addChild(createLightCentered<MediumLight<BlueLight>>(mm2px(Vec(96.485, 53.942)), module, Blur::GAIN_FREQ_ALL_LED_LIGHT));
+//		addChild(createLightCentered<MediumLight<YellowLight>>(mm2px(Vec(75.174, 59.616)), module, Blur::BLUR_FREQ_SELECTOR_LED_LIGHT));
+//		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(85.798, 59.616)), module, Blur::PITCH_FREQ_SELECTOR_LED_LIGHT));
+//		addChild(createLightCentered<MediumLight<BlueLight>>(mm2px(Vec(96.515, 59.616)), module, Blur::GAIN_FREQ_SELECTOR_LED_LIGHT));
+		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(21.136, 80.529)), module, Blur::ROBOT_LED_LIGHT));
+//		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(72.681, 87.078)), module, Blur::PITCH_QUANT_SELECTOR_LED_LIGHT));
+		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(78.743, 87.078)), module, Blur::PITCH_QUANT_SMOOTH_LED_LIGHT));
+		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(83.631, 87.078)), module, Blur::PITCH_QUANT_SEMITONES_LED_LIGHT));
+		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(88.519, 87.078)), module, Blur::PITCH_QUANT_FIFTHS_LED_LIGHT));
+		addChild(createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(93.407, 87.078)), module, Blur::PITCH_QUANT_OCTAVE_LED_LIGHT));
+//		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(41.582, 114.189)), module, Blur::RESIDUAL_SWITCH_LED_LIGHT));
+	}
 
     virtual void appendContextMenu(Menu* menu) override {
 		Blur * module = dynamic_cast<Blur*>(this->module);
