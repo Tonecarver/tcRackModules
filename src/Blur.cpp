@@ -1,16 +1,11 @@
 #include "plugin.hpp"
 #include <math.hpp>
 #include <dsp/fft.hpp>
+#include "../lib/CircularBuffer.hpp"
+#include "../lib/List.hpp"
 
 const int MAX_FFT_FRAME_SIZE = 16384;
-//const int DFLT_FFT_FRAME_SIZE = 16384;
-//const int DFLT_FFT_FRAME_SIZE = 8192;
-//const int DFLT_FFT_FRAME_SIZE = 4096;
 const int DFLT_FFT_FRAME_SIZE = 2048;
-//const int DFLT_FFT_FRAME_SIZE = 1024;
-//const int DFLT_FFT_FRAME_SIZE = 512;
-//const int DFLT_FFT_FRAME_SIZE = 256;
-//const int DFLT_FFT_FRAME_SIZE = 32;
 
 const int MIN_HISTORY_FRAMES = 2; // allow for minimum blur
 const int MAX_HISTORY_FRAMES = 10000; 
@@ -34,233 +29,6 @@ struct FreezeParamQuantity;
 struct RobotParamQuantity;
 struct BlurSpreadParamQuantity;
 struct BlurMixParamQuantity;
-
-struct ListNode {
-    struct ListNode * pNext;
-    struct ListNode * pPrev;
-
-    void detach() {
-        pNext = NULL;
-        pPrev = NULL;
-    }
-};
-template <class T>
-struct DoubleLinkList {
-    T * pHead;
-    T * pTail;
-    int numMembers;
-
-    DoubleLinkList() {
-        pHead = NULL;
-        pTail = NULL;
-        numMembers = 0;
-    }
-
-    ~DoubleLinkList() {
-        deleteMembers();
-    }
-
-    int size() const { return numMembers; }
-
-    bool isEmpty() const { return pHead == NULL; }
-
-    void deleteMembers() { 
-        while (pHead != NULL) {
-            T * pItem = pHead;
-            pHead = (T*) pHead->pNext;
-            delete pItem;
-        }
-        pHead = NULL;
-        pTail = NULL;
-        numMembers = 0;
-    }
-
-    T * popFront() { 
-        if (pHead != NULL) {
-            T * pItem = pHead;
-            pHead = (T*) pItem->pNext;
-            if (pHead == NULL) {
-                pTail = NULL;
-            }
-            numMembers--;
-            pItem->detach();
-            return pItem;
-        }
-        return NULL;
-    }
-
-    T * popTail() { 
-        if (pTail != NULL) {
-            T * pItem = pTail;
-            pTail = (T*) pItem->pPrev;
-            if (pTail == NULL) {
-                pHead = NULL;
-            }
-            numMembers--;
-            pItem->detach();
-            return pItem;
-        }
-        return NULL;
-    }
-
-    void pushFront(T * pItem) { 
-        if (pHead == NULL) {
-            pHead = pItem;
-            pTail = pItem;
-            pItem->detach();
-        }
-        else // pHead != null
-        {
-            pItem->pPrev = NULL;
-            pItem->pNext = pHead;
-            pHead = pItem;
-        }
-        numMembers++;
-    }
-
-    void pushTail(T * pItem) { 
-        if (pTail == NULL) {
-            pHead = pItem;
-            pTail = pItem;
-            pItem->detach();
-        }
-        else // pTail != null
-        {
-            pItem->pPrev = pTail;
-            pItem->pNext = NULL;
-            pTail = pItem;
-        }
-        numMembers++;
-    }
-};
-
-
-template<class T>
-class CircularBuffer
-{
-    public:
-        CircularBuffer(size_t size) 
-        {
-            data = allocateCapacity(size);
-            capacity = int(size);
-            front = 1;
-            rear = 0;
-            population = 0;
-        }
-
-        ~CircularBuffer()
-        {
-            deleteMembers();
-            delete[] data;
-        }
-
-        bool isFull() const { return population == capacity; }
-        bool isEmpty() const { return population == 0; }
-        int  getCapacity() const { return capacity; }
-        int  getAvailable() const { return capacity - population; }
-        int  numMembers() const { return population; }
-
-//        void setCapacity(int capacityDesired) {
-//            if (capacityDesired > capacity) {
-//                growArray(capacityDesired);
-//            } else if (capacityDesired < capacity) {
-//                shrinkArray(capacityDesired);
-//            }
-//        }
-
-        void enQueue(T * pItem)
-        {
-            if (population < capacity)
-            {
-                population++;
-                rear = (rear + 1) % capacity;
-                data[rear] = pItem;
-            }
-            else
-            {
-                // Overflow !
-                DEBUG("ERROR: -- Circular buffer OVERFLOW: ptr = %p", pItem);
-            }
-        }
-
-        T * deQueue()
-        {
-            if (population > 0)
-            {
-                population--;
-                T * pItem = data[front];
-                data[front] = NULL;
-                front = (front + 1) % capacity;
-                return pItem;
-            }
-            else
-            {
-                return NULL; // Underflow !
-            }
-        }
-
-        T * peekAt(size_t iIndex) 
-        {
-            int idx = (rear - iIndex);
-            if (idx < 0) {
-                idx += capacity;
-            }
-            return data[idx];
-        }
-
-        void deleteMembers() 
-        {
-            while (! isEmpty()) {
-                T * pItem = deQueue();
-                delete pItem;
-            }
-        }
-
-    private:
-        T ** data;
-        int capacity; // physical capacity
-        int rear; // index of most recent (newest) entry
-        int front;// index of oldest entry
-        int population; // number of occupants 
-
-        T ** allocateCapacity(int capacityDesired) {
-            T ** ptr = new T*[capacityDesired];
-            memset(ptr, 0, sizeof(T*) * capacityDesired);
-            return ptr;
-        }
-
-//        void growArray(int capacityDesired) {
-//            T ** new_data = allocateCapacity(capacityDesired);
-//            for (int k = 0; k < capacity; k++) {
-//                new_data[k] = data[k];
-//            }
-//            delete[] data;
-//            data = new_data;
-//            capacity = capacityDesired;
-//        }
-//
-//        void shrinkArray(int capacityDesired) {
-//            // This would be more efficient if the buffer had a 'limit' variable that 
-//            // can be less or equal to capacity. limit would be the maximum gap between the
-//            // front and rear indexes .. or something .. more optimal perhaps but trickier to implement
-//
-//            T ** new_data = allocateCapacity(capacityDesired);
-//
-//            for (int k = 0; k < capacityDesired; k++) {
-//                new_data[k] = deQueue();
-//            }
-//
-//            deleteMembers();
-//            
-//            delete[] data;
-//            data = new_data;
-//            capacity = capacityDesired;
-//            front = 0; 
-//            rear = capacityDesired - 1;
-//            population = capacityDesired;
-//        }
-
-};
 
 struct AlignedBuffer {
     public: float * values;
@@ -354,7 +122,6 @@ inline int myCeil(float fVal) {
     return 32768 - int(32768. - fVal);
 }
 
-
 inline float wrapPlusMinusPi(float phase)
 {
    // wrap phase difference to -PI .. PI range 
@@ -372,11 +139,17 @@ inline float wrapPlusMinusPi(float phase)
 // Scaling factors for multiplying the synthesized FFT values
 // Determined emperically using Sine and Saw waveforms
 // Top Value (5.f) is the range of VCV rack audio signals
-// BOttom Value is the level of the synthesized FFT output without amplification 
+// Bottom Value is the level of the synthesized FFT output without amplification 
+
+const float DFLT_SAMPLE_RATE_SCALING_FACTOR = 5.f/3.75f;
 const struct ScalingFactor {
     float sampleRate;
     float scalingFactor;
 } scalingFactors[] = {
+    {  11025.f, 5.f/3.75f },
+    {  12000.f, 5.f/3.75f },
+    {  22050.f, 5.f/3.75f },
+    {  24000.f, 5.f/3.75f },
     {  44100.f, 5.f/3.75f },
     {  48000.f, 5.f/3.75f },
     {  88200.f, 5.f/3.75f },
@@ -582,8 +355,6 @@ struct Blur : Module {
 
     int iStepSize; 
     FftFrame fftWorkspace{2 * MAX_FFT_FRAME_SIZE};
-    // This will ultimately be an FFT Frame pulled from the frame pool
-    // and added to the history list
     FftFrame fftTemp{MAX_FFT_FRAME_SIZE};
 
     AlignedBuffer lastPhase{MAX_FFT_FRAME_SIZE/2 + 1};
@@ -741,22 +512,6 @@ struct Blur : Module {
     float fActiveBlurMix; 
     float fActiveBlurSpread; 
 
-
-        // TODO: consider using single flag like "reconfigRequired"
-        // set that flag AFTER setting the SelectedXXX variable 
-        //
-        //  menu: 
-        //     module->selectedFoo = 99
-        //     module->reconfigRequired = true
-        //
-        // this method
-        //    if reconfig required
-        //       reconfig required = false  << race condition?
-        //       fftsize = selected 
-        //       sample rate = selected
-        //       osamp = selected
-        //       reconfigure()
-        //
     void applyFftConfiguration() {
         bool bConfigurationRequired = false;
 
@@ -800,7 +555,7 @@ struct Blur : Module {
             fMaxExponent = log10(fFreqNyquist);
             fExponentRange = fMaxExponent - fMinExponent;
 
-            fSampleRateScalingFactor = 1.f;
+            fSampleRateScalingFactor = DFLT_SAMPLE_RATE_SCALING_FACTOR;
             for (size_t k = 0; k < sizeof(scalingFactors)/sizeof(scalingFactors[0]); k++) {
                 if (scalingFactors[k].sampleRate == fActiveSampleRate) {
                     fSampleRateScalingFactor = scalingFactors[k].scalingFactor;
@@ -879,14 +634,13 @@ struct Blur : Module {
             fftFrameHistory.enQueue(pFftFrame);
         }
 
-// TODO: if the max history frames exceeds the initial capacity then
-// shrink the actual number of seconds displayed in the tooltip  
-// at 44100.0 with oversample 1 and frames size of 1 the frames-per-second is 44100.0 
-// at 44100.0 with oversample 8 and frame size of 2048 the frames-per-second is 721.9 
-//
-// Clearly the extreme FFT settings and sample rates would swamp memory very quickly
-// - limit the history buffer length to accomodate the extreme settings
-
+        // if the max history frames exceeds the initial capacity then
+        // shrink the actual number of seconds displayed in the tooltip  
+        // at 44100.0 with oversample 1 and frames size of 1 the frames-per-second is 44100.0 
+        // at 44100.0 with oversample 8 and frame size of 2048 the frames-per-second is 721.9 
+        //
+        // Clearly the extreme FFT settings and sample rates would swamp memory very quickly
+        // - limit the history buffer length to accomodate the extreme settings
     }
 
     void configureFftEngine_default() {
@@ -1173,8 +927,6 @@ struct Blur : Module {
         fGain = clamp(fGain, 0.f, 1.f);
         if (fGain != fSelectedOutputGain) { 
             fSelectedOutputGain = fGain;
-
-            // TODO: for efficiency, only do this computation if the gain value changed 
             fGain = (fGain - 0.5) * 2; // convert to [-1,1]
             if (fGain < 0.f) {
                 fOutputGain = pow(10.f, fGain * 6.f); // -60 db; 
@@ -1521,9 +1273,9 @@ struct Blur : Module {
             anaFrequency.values[k] = tmp;   // frequency
         }
 
-        // TODO: add option for this
+        // I think this is a mistake - some leftover code after adding the 5-way pitch mode selector
+        // but it works well as coded, so it stays in  
         bool bPitchSuppressUnselected = true;
-        // bool bPitchSuppressUnselected = false;
 
     	synMagnitude.clear();
         synFrequency.clear();
@@ -1624,23 +1376,6 @@ struct Blur : Module {
 
     }
 
-
-
-
-// TODO: consider this 
-//    FftFrame * getEmptyFrame() {
-//        FftFrame * pFrame = fftFramePool.popFront();
-//        if (pFrame == NULL) {
-//            pFrame = new FftFrame(iFftFrameSize);
-//        }
-//        pFrame->clear();
-//        return pFrame;
-//    }
-//
-//    void cacheFrame(FftFrame * pFrame) {
-//        fftFramePool.pushFront(pFrame);
-//    }
-
     // TODO: Future - this is not called yet 
     void shiftFrame(FftFrame & sourceFrame, int shiftAmount) {
 
@@ -1657,14 +1392,6 @@ struct Blur : Module {
         // leave bins 0 and fftFrameSize/2 alone 
         for (int k = 1; k < iFftFrameSize/2; k++) {
             int targetBin = k + shiftAmount;
-            //if (targetBin <= 0) {
-            //    targetBin += iFftFrameSize/2;
-            //}
-            //if (targetBin >= iFftFrameSize/2) {
-            //    targetBin -= iFftFrameSize/2;
-            //}
-            //pShiftedFrame->values[2*targetBin] += sourceFrame.values[2*k];
-            //pShiftedFrame->values[2*targetBin+1] += sourceFrame.values[2*k+1];
 
             // Discard over/under shoots
             if (targetBin > 0 && targetBin < iFftFrameSize/2) {
