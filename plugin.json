@@ -1,7 +1,7 @@
 {
   "slug": "Tonecarver",
   "name": "Tonecarver",
-  "version": "1.0.1",
+  "version": "2.0.0",
   "license": "proprietary",
   "brand": "Tonecarver",
   "author": "Bill Davies",
@@ -18,14 +18,16 @@
       "name": "Blur",
       "description": "Spectral Blur",
       "tags": [
-        "spectral"
+        "Spectral", "Effect"
       ]
     },
     {
       "slug": "Morse",
       "name": "Morse",
       "description": "Generate Morse Code gate sequence",
-      "tags": []
+      "tags": [
+        "Sequencer"
+      ]
     }
   ]
 }

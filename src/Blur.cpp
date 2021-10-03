@@ -154,12 +154,12 @@ const struct ScalingFactor {
     {  48000.f, 5.f/3.75f },
     {  88200.f, 5.f/3.75f },
     {  96000.f, 5.f/3.75f },
-    { 176400.f, 5.f/3.75f },
-    { 192000.f, 5.f/3.75f },
-    { 352800.f, 5.f/3.68f },
-    { 384000.f, 5.f/3.62f },
-    { 705600.f, 5.f/2.60f },
-    { 768000.f, 5.f/2.445f },
+    { 176400.f, 5.f/3.315f },
+    { 192000.f, 5.f/3.155f },
+    { 352800.f, 5.f/2.045f },
+    { 384000.f, 5.f/1.925f },
+    { 705600.f, 5.f/1.460f },
+    { 768000.f, 5.f/1.425f },
 };
 
 inline float gainForDb(float dB) {
@@ -545,6 +545,8 @@ struct Blur : Module {
 
         iOversample = oversample;
 
+
+        // TODO:move to OnSampleRateChange()
         if (fActiveSampleRate != sampleRate) {
             fActiveSampleRate = sampleRate; 
 
@@ -700,7 +702,25 @@ struct Blur : Module {
 		configParam(PHASE_RESET_PARAM, 0.f, 1.f, 0.f, "Phase Reset");
 		configParam<MixParamQuantity>(MIX_PARAM, 0.f, 1.f, 1.f, "Wet/Dry Mix");
 		configParam(MIX_ATTENUVERTER_PARAM, -1.f, 1.f, 0.f, "Mix Attenuverter");
-		
+
+		configInput(HISTORY_CV_INPUT,"10v");
+		configInput(FREQ_CENTER_CV_INPUT,"10v");
+		configInput(POSITION_CV_INPUT,"10v");
+		configInput(FREQ_SPAN_CV_INPUT,"10v");
+		configInput(FRAME_DROP_CV_INPUT,"10v");
+		configInput(FREEZE_CV_INPUT,"10v");
+		configInput(BLUR_SPREAD_CV_INPUT,"10v");
+		configInput(PITCH_CV_INPUT,"10v");
+		configInput(ROBOT_CV_INPUT,"10v");
+		configInput(BLUR_MIX_CV_INPUT,"10v");
+		configInput(GAIN_CV_INPUT,"10v");
+		configInput(AUDIO_IN_INPUT,"+/- 5v Audio In");
+		configInput(MIX_CV_INPUT,"10v");
+
+		configOutput(AUDIO_OUT_OUTPUT,"+/- 5v Audio Out");
+
+        configBypass(AUDIO_IN_INPUT, AUDIO_OUT_OUTPUT);
+
         pComplexFftEngine = NULL;
         initialize();
 	}
