@@ -386,8 +386,8 @@ static void selectPath(Morse* module) {
 	std::string dir;
 	std::string filename;
 	if (module->filepath != "") {
-		dir = string::directory(module->filepath);
-		filename = string::filename(module->filepath);
+		dir = rack::system::getDirectory(module->filepath);
+		filename = rack::system::getFilename(module->filepath);
 	}
 	else {
 		dir = asset::user("");
