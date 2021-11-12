@@ -9,7 +9,7 @@
 #include "../lib/ThreadSafeList.hpp"
 #include "../lib/PtrArray.hpp"
 #include "../lib/SampleRateCalculator.hpp"
-#include "TravelerExpander.hpp"
+// #include "TravelerExpander.hpp"
 
 
 #include "../lib/SimpleScale.hpp"
@@ -2442,7 +2442,7 @@ struct Traveler : Module {
 
 	// EXPERIMENT 
 	// Expander module 
-	TravelerExpanderMessage rightMessages[2];
+	// TravelerExpanderMessage rightMessages[2];
 
 	// EXPERIMENT 
 	// Stack of preserved patterns 
@@ -2527,8 +2527,8 @@ struct Traveler : Module {
 		//leftExpander.producerMessage = leftMessages[0];
 		//leftExpander.consumerMessage = leftMessages[1];
 
-		rightExpander.producerMessage = &rightMessages[0];
-		rightExpander.consumerMessage = &rightMessages[1];
+		//rightExpander.producerMessage = &rightMessages[0];
+		//rightExpander.consumerMessage = &rightMessages[1];
 
 		clock.setSampleRate(APP->engine->getSampleRate());
 		clock.setBeatsPerMinute(DFLT_BPM);
