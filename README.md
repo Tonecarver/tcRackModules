@@ -80,6 +80,27 @@ The Traveler VCV Rack module is a generative sequencer. A set of rovers move thr
 
 **Rover & Obstacle Palette** - Select Rover (triangle) or Obstacle to be inserted into matrix. To insert the selected item, left-click on a cell in the matrix. 
 
+> |  = horizontal mirror
+> -  = vertical mirror
+> /  = mirror up      
+> \  = mirror down    
+> |. = hor mirror flip
+> -. = vert mirror flip
+> /. = mirror up flip  
+> \. = mirror down flip
+> ^  = wedge north     
+> >  = wedge east      
+> v  = wedge south     
+> <  = wedge west      
+> square = reflect horizontal, wedge diagonals
+> diamond = reflect directions, wedge horizontals
+> circle with line = detour, move around this obstacle
+> sprocket = spin, move to random neighbor cell and direction
+> spiral - wormhole, move to random cell and direction  
+> green dot = move rover normal speed
+> orange dot = move rover alternate speed
+> green and orange dot pair = toggle rover speed: normal -> alternate, alternate -> normal  
+
 **Wall?** - Probability of a rover reflecting off a wall. Fully CW is 100% probable, awlays reflect. Fully CCW is 0% probable, never reflect. Rovers that do not reflect are 'passed through' and appear on the opposite wall heading in the same direction.
 
 **Obs?** - Probability of an obstacle affecting a rover that encounters it. Fully CW is 100% probable, awlays affect. Fully CCW is 0% probable, never affect.
