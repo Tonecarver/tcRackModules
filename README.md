@@ -110,6 +110,8 @@ The Traveler VCV Rack module is a generative sequencer. A set of rovers move thr
 
 **<, >, P** - Output Mode selector. Select '<' to output the minimum pitch, '>' to output the maximum pitch, and 'P' to emit polyphonic output. Set the maximum number of polyphony voices via the right-click menu.
 
+**Matrix** - Left-click in the matrix to insert the item selected in the Rover / Obstacle palette. Right-click in the matrix to clear a cell. 
+
 **Right-Click Menu** - Right click outside of the matrix and palette areas to bring up the context menu. The content menu allows you to set the maximum polyphony and load scale files. 
 
 **USAGE TIPS** - A small matrix of a few rows and columns can produce great results. A very busy matrix of any size can be tamed by reducing the Note and Wall probabilities, muting walls, etc. 
