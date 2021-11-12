@@ -133,8 +133,79 @@ struct DoubleLinkList {
             numMembers++;
         }
     }
+
+    T * remove(T * pItem) {
+        T * pMember = findMember(pItem);
+        if (pMember) {
+
+            if (pHead == pMember) {
+                pHead = (T*) pMember->pNext;
+            }
+
+            if (pTail == pMember) {
+                pTail = (T*) pMember->pPrev;
+            }
+
+            if (pMember->pPrev) {
+                pMember->pPrev->pNext = (T*) pMember->pNext;
+            }
+
+            if (pMember->pNext) {
+                pMember->pNext->pPrev = (T*) pMember->pPrev;
+            }
+            numMembers--;
+            pMember->detach();
+        }
+        return pMember;
+    }
+
+    T * findMember(T * pItem) { 
+        T * pMember = pHead; 
+        while (pMember != NULL && pMember != pItem) {
+            pMember = (T*) pMember->pNext;
+        }
+        return pMember; // may be null 
+    }
+
+    inline void enqueue(T * pItem) {
+        pushTail(pItem);
+    }
+
+    inline T * dequeue() {
+        return popFront();
+    }
+
 };
 
+template <class T>
+struct DoubleLinkListIterator {
+    DoubleLinkList<T> * pList;
+    T * pNext;
+
+    DoubleLinkListIterator(DoubleLinkList<T> & list) {
+        pList = &list;
+        pNext = list.peekFront();
+    }
+
+    bool hasMore() { 
+        return pNext != NULL;
+    }
+
+    T * getNext() { 
+        T * pMember = pNext;
+        if (pMember) {
+            pNext = (T*) pMember->pNext;
+        } else { 
+            pNext = NULL;
+        }
+        return pMember;
+    }
+
+    void reset() { // point back to beginning of list 
+        pNext = pList->peekFront();
+    }
+
+};
 
 struct DelayListNode : ListNode {
     long delay;

@@ -1,8 +1,8 @@
 {
   "slug": "Tonecarver",
   "name": "Tonecarver",
-  "version": "1.0.1",
-  "license": "MIT",
+  "version": "1.0.2",
+  "license": "GPL-3.0-only",
   "brand": "Tonecarver",
   "author": "Bill Davies",
   "authorEmail": "bdavies00@yahoo.com",
@@ -27,6 +27,15 @@
       "description": "Generate Morse Code gate sequence",
       "tags": [
         "Sequencer"
+      ]
+    },
+    {
+      "slug": "Traveler",
+      "name": "Traveler",
+      "description": "Generative sequencer using rovers and obstacles to create evolving patterns",
+      "tags": [
+        "Sequencer", 
+        "Random"
       ]
     }
   ]
