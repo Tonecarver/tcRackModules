@@ -49,3 +49,68 @@ The Pitch selector has two additional settings that preserve the non-selected fr
 
 **Popup Menu** has options to set the FFT size and the Oversample amount. Low FFT sizes are good for distorting the sound. Low oversample amounts also tend to introduce noise and artifacts. Larger FFT sizes with oversamlple of 4 or 8 provide better clarity. FFT Size 2048 with oversample 4 is a good starting point. Experimentation is the key!
 
+## Traveler
+
+![traveler screenshot](./doc/images/Traveler-screenshot.png)
+
+The Traveler VCV Rack module is a generative sequencer. A set of rovers move through a matrix until they encounter a wall, another rover, or an obstacle. When a rover encounters a wall, it emits a V/Oct level corresponding to the pitch assigned to the wall at the point of collision, then then reverses direction. When a rover encounters another rover, both rovers are rotated clockwise. When a rover encounters an obstacle, the effects of the obstacle are applied to the rover which could alter its position, its direction, or its speed, depending on the type of obstacle. 
+### Usage Hints: 
+
+**Clock** - Input for external clock. An external clock signal overrides the internal BPM setting.
+
+**BPM** - Internal BPM clock controls rate of rover movement when external clock is not connected.
+
+**Run** - Run / Pause control.
+
+**Rev** - Reverse rover directions
+
+**Note Length** - The note/gate length. In the middle the gate length equals 1 beat. At maximum the gate length is 2 beats per note.  
+
+**Rows** - The number of rows in the matrix
+
+**Columns** - The number of columns in the matrix
+
+**Herd** - Controls how rover positions are affected when the number of rows and columns change. When herding is enabled, rovers inside the matrix are swept along with wall movements as the matrix size shrinks so that they always remain inside the matix. When herding is disabled, rovers maintain their position and remain outside the active portion of the matrix if the matrix size shrinks enough to exclude their position. The rovers remain in place and can be brought back to active status by expanding the matrix to its pre-shrunk size.  
+
+**Scale** - Traveler can load up to 4 scales at a time each with independent root note. To load a scale, right-click to show the contenxt menu, select a scale, and browse to the scales folder to select a scale file. A scale may be activated by clicking on the selection button to the left of the scale name or by providing appropriate voltage to the scale selector CV. Scale selector CV is unipolar, 0..10v, divided into 4 equal ranges corresponding to the scale to be selected: [0,2.5), [2.5,5), [5,7.5), [7.5,10)
+
+**Root** - The root note for a scale
+
+**Alt Speed** - Selects the travel rate for a rover moving at the alternate speed. /2 = half-speed, x2 = double speed
+
+**Rover & Obstacle Palette** - Select Rover (triangle) or Obstacle to be inserted into matrix. To insert the selected item, left-click on a cell in the matrix. 
+
+**Wall?** - Probability of a rover reflecting off a wall. Fully CW is 100% probable, awlays reflect. Fully CCW is 0% probable, never reflect. Rovers that do not reflect are 'passed through' and appear on the opposite wall heading in the same direction.
+
+**Obs?** - Probability of an obstacle affecting a rover that encounters it. Fully CW is 100% probable, awlays affect. Fully CCW is 0% probable, never affect.
+
+**Note?** - Probability of a rover striking a wall resulting in V/Oct output. Fully CW is 100% probable, awlays output. Fully CCW is 0% probable, never output.
+
+**Stdy?** - Probability of a rover maintaining a steady path. Fully CW is 100% probable, awlays steady. Fully CCW is 0% probable, never steady.
+
+**Clear** - Controls to clear the occupants in the matrix
+
+**North / South / East / West** - Columns of controls assigned to each of the 4 walls in the matrix.
+
+**Invert** - Order scale ascending or descending.
+
+**Rotate** - Rotate scale not positions.
+
+**Auto** - Automatically rotate the scale by this amount every time a rover strikes the wall.
+
+**Climb** - Slide a rover along a wall by this amount following a wall strike.
+
+**Mute** - Disable output from this wall.
+
+**Home** - Reset position of wall notes to match dials. Essentialy undoes all previous auto-rotations.
+
+**Gate** - Gate output. 1 output for each of the 4 walls and 1 output as a summary output. 
+
+**V/Oct** - V/Oct output.  1 output for each of the 4 walls and 1 output as a summary output. 
+
+**<, >, P** - Output Mode selector. Select '<' to output the minimum pitch, '>' to output the maximum pitch, and 'P' to emit polyphonic output. Set the maximum number of polyphony voices via the right-click menu.
+
+**Right-Click Menu** - Right click outside of the matrix and palette areas to bring up the context menu. The content menu allows you to set the maximum polyphony and load scale files. 
+
+**USAGE TIPS** - A small matrix of a few rows and columns can produce great results. A very busy matrix of any size can be tamed by reducing the Note and Wall probabilities, muting walls, etc. 
+
