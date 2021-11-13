@@ -211,7 +211,7 @@ struct ScaleTemplateParser {
                 reportError("Maximum number of pitches reached: ignoring further input");
             } else {
                 scaleUnderConstruction.addPitch(pitch);
-                DEBUG(" -- Add pitch %d", pitch);
+                // DEBUG(" -- Add pitch %d", pitch);
             }
         }
     }

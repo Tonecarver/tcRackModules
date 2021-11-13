@@ -175,7 +175,7 @@ struct ScalaParser {
         float ratio = numer / denom; 
         float cents = 1200 * log2(ratio);
 
-        DEBUG(" Ratio: numer %f, denom %f = ratio %f, cents %f", numer, denom, ratio, cents);
+        //DEBUG(" Ratio: numer %f, denom %f = ratio %f, cents %f", numer, denom, ratio, cents);
 
         return cents;
 

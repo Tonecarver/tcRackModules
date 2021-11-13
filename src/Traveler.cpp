@@ -2232,7 +2232,7 @@ struct Traveler : Module {
 
 	void setScaleFile(ScaleId scaleId, std::string const& path) {
 
-		DEBUG("Load Scale Template[%d] from %s", scaleId, path.c_str());
+		// DEBUG("Load Scale Template[%d] from %s", scaleId, path.c_str());
 		bool success = importScaleTemplate(scales[scaleId], path);
 		if (success) {
 			applyScaleChange(scaleId);
@@ -2302,7 +2302,7 @@ struct Traveler : Module {
 	OutputMode outputMode; 
 	int activePolyphony; 
 	void setActivePolyphony(int polyphony) {
-		DEBUG("-- SET Active Polyphony: %d", polyphony);
+		// DEBUG("-- SET Active Polyphony: %d", polyphony);
 		activePolyphony = clamp(polyphony, 1, MAX_POLYPHONY);
 		activePolyphony = polyphony;
 		setPolyphony(activePolyphony);
@@ -2757,7 +2757,7 @@ struct Traveler : Module {
 				float birthday = getJsonInteger(jsonValue, "bday");   // TODO: make constants for these strings
 				int type   = getJsonInteger(jsonValue, "type");
 				int speed  = getJsonInteger(jsonValue, "speed");
-				DEBUG("Load Rover: row %d, col %d, type %d, speed %d", row, column, type, speed);
+				// DEBUG("Load Rover: row %d, col %d, type %d, speed %d", row, column, type, speed);
 				restoreRover((RoverType) type, row, column, birthday, (SpeedType) speed);
 			}
 		}
@@ -3290,8 +3290,8 @@ struct Traveler : Module {
 			int row_delta = numRows - matrix.getNumRows();
 			int column_delta = numColumns - matrix.getNumColumns();
 			
-			DEBUG("Size Change: was rows %d , cols %d", matrix.getNumRows(), matrix.getNumColumns());
-			DEBUG("              is rows %d , cols %d", numRows, numColumns);
+			//DEBUG("Size Change: was rows %d , cols %d", matrix.getNumRows(), matrix.getNumColumns());
+			//DEBUG("              is rows %d , cols %d", numRows, numColumns);
 
 			matrix.dimensions.setRowsCols(numRows, numColumns);
 
@@ -4013,7 +4013,7 @@ struct Traveler : Module {
 
 				// if failed to assign, discard 
 				if (! placed) {
-					DEBUG("Discarding displaced Rover .. no place for it");
+					//DEBUG("Discarding displaced Rover .. no place for it");
 					activeRovers.remove(pRover);
 					roverPool.pushTail(pRover);
 				}
@@ -4736,7 +4736,7 @@ struct RoverAreaWidget : rack::widget::OpaqueWidget {
 		int moduleProducerCount = pModule->producerCount;
 		if (moduleProducerCount != pModule->consumerCount) {
 			updateCount = moduleProducerCount;
-			DEBUG(" Draw: count %d", updateCount);			
+			// DEBUG(" Draw: count %d", updateCount);			
 		}
 
 		UiMatrix * pUiMatrix = pModule->pConsumer;
