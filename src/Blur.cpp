@@ -735,19 +735,32 @@ struct Blur : Module {
 		json_t* rootJ = json_object();
 		json_object_set_new(rootJ, "fftFrameSize", json_integer(iFftFrameSize));
 		json_object_set_new(rootJ, "fftOversample", json_integer(iOversample));
-		return rootJ;
+	    json_object_set_new(rootJ, "pitchQuant", json_integer(pitchQuantization));
+        return rootJ;
 	}
 
 	virtual void dataFromJson(json_t* rootJ) override {
 		json_t* jsonValue;
         
         jsonValue = json_object_get(rootJ, "fftFrameSize");
-		if (jsonValue)
-			iFftFrameSize = json_integer_value(jsonValue);
+		if (jsonValue) {
+			iSelectedFftFrameSize = json_integer_value(jsonValue);
+            // iFftFrameSize gets set in applyFftConfiguration()
+        }
 
 		jsonValue = json_object_get(rootJ, "fftOversample");
-		if (jsonValue)
-			iOversample = json_integer_value(jsonValue);
+		if (jsonValue) {
+			iSelectedOversample = json_integer_value(jsonValue);
+            // iOversample gets set in applyFftConfiguration()
+        }
+
+        applyFftConfiguration();
+
+		jsonValue = json_object_get(rootJ, "pitchQuant");
+		if (jsonValue) {
+			pitchQuantization = json_integer_value(jsonValue);
+            setPitchQuantization(pitchQuantization);
+        }
 	}
 
     void resetPhaseHistory() { 
@@ -818,7 +831,7 @@ struct Blur : Module {
 
         // TODO: move to separate method
         float fMix = params[MIX_PARAM].getValue();
-        fMix += params[MIX_ATTENUVERTER_PARAM].getValue() * getCvInput(GAIN_CV_INPUT);    
+        fMix += params[MIX_ATTENUVERTER_PARAM].getValue() * getCvInput(MIX_CV_INPUT);    
         fMix = clamp(fMix, 0.f, 1.f);
         if (fMix != fActiveOutputMix) {
             fActiveOutputMix = fMix; 
