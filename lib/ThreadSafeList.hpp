@@ -14,7 +14,7 @@ struct ThreadSafeDoubleLinkList {
     T * pHead;
     T * pTail;
     int numMembers;
-    std::mutex list_mutex;
+    mutable std::mutex list_mutex;
 
     ThreadSafeDoubleLinkList() {
         pHead = NULL;
