@@ -29,12 +29,12 @@ struct ThreadSafeDoubleLinkList {
     int size() const { return numMembers; }
 
     bool isEmpty() const { 
-        const std::lock_guard<std::mutex> lock(list_mutex);
+        std::lock_guard<std::mutex> lock(list_mutex);
         return pHead == NULL; 
     }
 
     void deleteMembers() { 
-        const std::lock_guard<std::mutex> lock(list_mutex);
+        std::lock_guard<std::mutex> lock(list_mutex);
         while (pHead != NULL) {
             T * pItem = pHead;
             pHead = (T*) pHead->pNext;
@@ -46,12 +46,12 @@ struct ThreadSafeDoubleLinkList {
     }
 
     T * peekFront() { 
-        const std::lock_guard<std::mutex> lock(list_mutex);
+        std::lock_guard<std::mutex> lock(list_mutex);
         return pHead;
     }
 
     T * popFront() { 
-        const std::lock_guard<std::mutex> lock(list_mutex);
+        std::lock_guard<std::mutex> lock(list_mutex);
         if (pHead != NULL) {
             T * pItem = pHead;
             pHead = (T*) pItem->pNext;
@@ -68,7 +68,7 @@ struct ThreadSafeDoubleLinkList {
     }
 
     T * popTail() { 
-        const std::lock_guard<std::mutex> lock(list_mutex);
+        std::lock_guard<std::mutex> lock(list_mutex);
         if (pTail != NULL) {
             T * pItem = pTail;
             pTail = (T*) pItem->pPrev;
@@ -85,7 +85,7 @@ struct ThreadSafeDoubleLinkList {
     }
 
     void pushFront(T * pItem) { 
-        const std::lock_guard<std::mutex> lock(list_mutex);
+        std::lock_guard<std::mutex> lock(list_mutex);
         if (pHead == NULL) {
             pHead = pItem;
             pTail = pItem;
@@ -102,7 +102,7 @@ struct ThreadSafeDoubleLinkList {
     }
 
     void pushTail(T * pItem) { 
-        const std::lock_guard<std::mutex> lock(list_mutex);
+        std::lock_guard<std::mutex> lock(list_mutex);
         if (pTail == NULL) {
             pHead = pItem;
             pTail = pItem;
@@ -119,7 +119,7 @@ struct ThreadSafeDoubleLinkList {
     }
 
     void insertBefore(T * pMember, T * pItem) {       
-        const std::lock_guard<std::mutex> lock(list_mutex);
+        std::lock_guard<std::mutex> lock(list_mutex);
         if (pHead == NULL || pHead == pMember) {
             pushFront(pItem);
         } else {
