@@ -1,0 +1,10 @@
+V1.0.2  Nov-13-2021
+
+Blur: 
+- FFT Size value saved/restored with patch
+- FFT Oversample value saved/restored with patch
+- Pitch Quantize value saved/restored with patch
+- Mix: use correct CV input to compute mix setting
+
+Traveler:
+- initial release 

@@ -72,7 +72,11 @@ The Traveler VCV Rack module is a generative sequencer. A set of rovers move thr
 
 **Herd** - Controls how rover positions are affected when the number of rows and columns change. When herding is enabled, rovers inside the matrix are swept along with wall movements as the matrix size shrinks so that they always remain inside the matix. When herding is disabled, rovers maintain their position and remain outside the active portion of the matrix if the matrix size shrinks enough to exclude their position. The rovers remain in place and can be brought back to active status by expanding the matrix to its pre-shrunk size.  
 
-**Scale** - Traveler can load up to 4 scales at a time each with independent root note. To load a scale, right-click to show the contenxt menu, select a scale, and browse to the scales folder to select a scale file. A scale may be activated by clicking on the selection button to the left of the scale name or by providing appropriate voltage to the scale selector CV. Scale selector CV is unipolar, 0..10v, divided into 4 equal ranges corresponding to the scale to be selected: [0,2.5), [2.5,5), [5,7.5), [7.5,10)
+**Scale** - Traveler can load up to 4 scales at a time each with independent root note. The scale files are available in the repo under the 'scales' folder. They are also available ina zip file here: *[scale files zipped](https://www.dropbox.com/s/j8i9smztk4juqvk/scales.zip?dl=0)*. Unzip the scale files to a folder on your hard drive. 
+
+ To load a scale, right-click to show the contenxt menu, select a scale, and browse to the scales folder to select a scale file. 
+ 
+ A scale may be activated by clicking on the selection button to the left of the scale name or by providing appropriate voltage to the scale selector CV. Scale selector CV is unipolar, 0v to 10v, divided into 4 equal ranges corresponding to the scale to be selected: [0,2.5), [2.5,5), [5,7.5), [7.5,10)
 
 **Root** - The root note for a scale
 
@@ -155,4 +159,6 @@ green and orange dot pair = toggle rover speed: normal -> alternate, alternate -
 **Right-Click Menu** - Right click outside of the matrix and palette areas to bring up the context menu. The content menu allows you to set the maximum polyphony and load scale files. 
 
 **USAGE TIPS** - A small matrix of a few rows and columns can produce great results. A very busy matrix of any size can be tamed by reducing the Note and Wall probabilities, muting walls, etc. 
+
+  
 
