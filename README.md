@@ -3,7 +3,7 @@
 
 ![blur screenshot](./doc/images/Blur-screenshot.png)
 
-Blur is a VCV Rack module that does spectral manipulations on incoming audio.
+Blur is a VCV Rack module that performs spectral manipulations on incoming audio.
 
 ### Usage Hints: 
 
