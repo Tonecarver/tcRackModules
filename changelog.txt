@@ -1,4 +1,4 @@
-V1.0.2  Nov-13-2021
+V1.0.4  Nov-13-2021
 
 Blur: 
 - FFT Size value saved/restored with patch
