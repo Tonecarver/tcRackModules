@@ -12,3 +12,4 @@ extern Plugin* pluginInstance;
 
 extern Model* modelBlur;
 extern Model* modelMorse;
+extern Model* modelTraveler;
