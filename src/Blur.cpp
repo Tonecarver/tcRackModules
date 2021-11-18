@@ -3,6 +3,9 @@
 #include <dsp/fft.hpp>
 #include "../lib/CircularBuffer.hpp"
 #include "../lib/List.hpp"
+#include "../lib/FastRandom.hpp"
+
+//using simd::float_4;
 
 const int MAX_FFT_FRAME_SIZE = 16384;
 const int DFLT_FFT_FRAME_SIZE = 2048;
@@ -82,36 +85,6 @@ struct AudioBuffer : public AlignedBuffer {
     }
 };
 
-
-struct Random { 
-    uint32_t x = 123456789;
-    uint32_t y = 362436069;
-    uint32_t z = 521288629;
-    uint32_t w = 88675123;
-    
-    float generateZeroToOne() { 
-        return (float) xor128() / (float)UINT32_MAX;
-    }
-
-    float generatePlusMinusOne() { 
-        return (((float) xor128() / (float)UINT32_MAX) - 0.5f) * 2.f;
-    }
-    
-    float generatePlusMinusPi() { 
-        return (((float) xor128() / (float)UINT32_MAX) - 0.5f) * 2.f * M_PI;
-    }
-    
-    //float generate() { 
-    //    return (float) xor128() / (float)UINT32_MAX;
-    //}
-
-    uint32_t xor128(void) {
-        uint32_t t;
-        t = x ^ (x << 11);   
-        x = y; y = z; z = w;   
-        return w = w ^ (w >> 19) ^ (t ^ (t >> 8));
-    }
-};
 
 // from https://www.codeproject.com/tips/700780/fast-floor-ceiling-functions
 inline int myFloor(float fVal) { 
@@ -366,7 +339,7 @@ struct Blur : Module {
     rack::dsp::ComplexFFT * pComplexFftEngine;
     float fSampleRateScalingFactor; 
 
-    Random random;
+    FastRandom random;
 
     float fActiveSampleRate; 
 
@@ -535,7 +508,7 @@ struct Blur : Module {
 
     void configureFftEngine(int frameSize, int oversample, float sampleRate) { 
 
-        if (iFftFrameSize != frameSize) {
+        if (iFftFrameSize != frameSize || (pComplexFftEngine == NULL)) {
             iFftFrameSize = frameSize;
             if (pComplexFftEngine != NULL) {
                 delete pComplexFftEngine;
@@ -715,6 +688,7 @@ struct Blur : Module {
 		json_t* rootJ = json_object();
 		json_object_set_new(rootJ, "fftFrameSize", json_integer(iFftFrameSize));
 		json_object_set_new(rootJ, "fftOversample", json_integer(iOversample));
+		json_object_set_new(rootJ, "pitchQuant", json_integer(pitchQuantization));
 		return rootJ;
 	}
 
@@ -722,12 +696,24 @@ struct Blur : Module {
 		json_t* jsonValue;
         
         jsonValue = json_object_get(rootJ, "fftFrameSize");
-		if (jsonValue)
-			iFftFrameSize = json_integer_value(jsonValue);
+		if (jsonValue) {
+			iSelectedFftFrameSize = json_integer_value(jsonValue);
+            // iFftFrameSize gets set in applyFftConfiguration()
+        }
 
 		jsonValue = json_object_get(rootJ, "fftOversample");
-		if (jsonValue)
-			iOversample = json_integer_value(jsonValue);
+		if (jsonValue) {
+			iSelectedOversample = json_integer_value(jsonValue);
+            // iOversample gets set in applyFftConfiguration()
+        }
+
+        applyFftConfiguration();
+
+		jsonValue = json_object_get(rootJ, "pitchQuant");
+		if (jsonValue) {
+			pitchQuantization = json_integer_value(jsonValue);
+            setPitchQuantization(pitchQuantization);
+        }
 	}
 
     void resetPhaseHistory() { 
@@ -798,9 +784,10 @@ struct Blur : Module {
 
         // TODO: move to separate method
         float fMix = params[MIX_PARAM].getValue();
-        fMix += params[MIX_ATTENUVERTER_PARAM].getValue() * getCvInput(GAIN_CV_INPUT);    
+        fMix += params[MIX_ATTENUVERTER_PARAM].getValue() * getCvInput(MIX_CV_INPUT);    
         fMix = clamp(fMix, 0.f, 1.f);
         if (fMix != fActiveOutputMix) {
+            // consider simd float_4 for this 
             fActiveOutputMix = fMix; 
             fMix = (fMix -0.5f) * 2.f; // convert to [-1,1]
             fActiveDryGain = sqrt(0.5f * (1. - fMix)); // equal power law
@@ -975,12 +962,48 @@ struct Blur : Module {
             pFftFrame->values[0] = 0.;
 
             // Convert Complex real/imag to magnitude/phase
+
+// TODO: EXPERIMENT with simd
+/********************************            
+            for (int k = 0; k <= iFftFrameSize/2; k += 4)
+            {
+                float_4 real; 
+                float_4 imag; 
+                
+                real.s[0] = pFftFrame->values[2*k];
+                imag.s[0] = pFftFrame->values[2*k+1];
+
+                real.s[1] = pFftFrame->values[2*k+2];
+                imag.s[1] = pFftFrame->values[2*k+3];
+
+                real.s[2] = pFftFrame->values[2*k+4];
+                imag.s[2] = pFftFrame->values[2*k+5];
+
+                real.s[3] = pFftFrame->values[2*k+6];
+                imag.s[3] = pFftFrame->values[2*k+7];
+
+                float_4 magn = 2.f * simd::sqrt(real*real + imag*imag);
+                float_4 phase = simd::atan2(imag, real);
+
+                pFftFrame->values[2*k]   = magn.s[0];
+                pFftFrame->values[2*k+1] = phase.s[0];
+
+                if (k <= iFftFrameSize/2) {
+                    pFftFrame->values[2*k+2] = magn.s[1];
+                    pFftFrame->values[2*k+3] = phase.s[1];
+
+                    pFftFrame->values[2*k+4] = magn.s[2];
+                    pFftFrame->values[2*k+5] = phase.s[2];
+
+                    pFftFrame->values[2*k+6] = magn.s[3];
+                    pFftFrame->values[2*k+7] = phase.s[3];
+                }
+
+            }
+****************/
+
             for (int k = 0; k <= iFftFrameSize/2; k++)
             {
-                //if (k <= 2) {
-                //    DEBUG(" - after analysis: bin[%d] is %f, %f", k, pFftFrame->values[2*k], pFftFrame->values[2*k+1]);
-                //}
-
                 double real = pFftFrame->values[2*k];
                 double imag = pFftFrame->values[2*k+1];
 
@@ -1013,6 +1036,8 @@ struct Blur : Module {
             double phase = fftTemp.values[2*k+1];
 
             // phase = wrapPlusMinusPi(phase);
+
+            // consider simd float_4 for this 
 
             // Apply frequency band constraints 
             // Disable gain for bins inside or outside the freq range 

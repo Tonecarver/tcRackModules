@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="6mm"
+   height="6mm"
+   viewBox="0 0 6 6"
+   version="1.1"
+   id="svg31263"
+   inkscape:version="1.1 (c68e22c387, 2021-05-23)"
+   sodipodi:docname="obstacle-vertical-mirror.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview31265"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:pageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:document-units="mm"
+     showgrid="false"
+     inkscape:zoom="2.9647587"
+     inkscape:cx="125.30531"
+     inkscape:cy="69.314242"
+     inkscape:window-width="1920"
+     inkscape:window-height="1017"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="layer1" />
+  <defs
+     id="defs31260" />
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <g
+       id="g36170"
+       style="display:inline"
+       transform="translate(-116.52486,107.41861)">
+      <rect
+         style="display:inline;fill:#cccccc;fill-opacity:0.282051;stroke:#000000;stroke-width:0.0915631;stroke-opacity:0.997669"
+         id="rect20953-85-1-7-16-8-7-6-1"
+         width="5.9084373"
+         height="5.9084368"
+         x="116.57064"
+         y="-107.37283" />
+      <path
+         style="display:inline;fill:none;stroke:#000000;stroke-width:0.5;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1"
+         d="m 121.77755,-104.41862 c -4.50536,0 -4.50536,0 -4.50536,0"
+         id="path24957-4" />
+    </g>
+  </g>
+</svg>

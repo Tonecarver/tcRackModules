@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="6mm"
+   height="6mm"
+   viewBox="0 0 6 6"
+   version="1.1"
+   id="svg31263"
+   inkscape:version="1.1 (c68e22c387, 2021-05-23)"
+   sodipodi:docname="obstacle-sprocket.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview31265"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:pageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:document-units="mm"
+     showgrid="false"
+     inkscape:zoom="1.4823793"
+     inkscape:cx="157.51704"
+     inkscape:cy="-81.962828"
+     inkscape:window-width="1500"
+     inkscape:window-height="1001"
+     inkscape:window-x="404"
+     inkscape:window-y="0"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="layer1" />
+  <defs
+     id="defs31260" />
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <g
+       id="g44576-3"
+       transform="translate(-122.75287,76.941099)"
+       style="display:inline">
+      <rect
+         style="display:inline;fill:#cccccc;fill-opacity:0.282051;stroke:#000000;stroke-width:0.0915631;stroke-opacity:0.997669"
+         id="rect20953-85-1-7-16-2-4-6"
+         width="5.9084373"
+         height="5.9084368"
+         x="122.79865"
+         y="-76.895317" />
+      <path
+         sodipodi:type="star"
+         style="fill:#e6e6e6;fill-opacity:0.282051;stroke:#000000;stroke-width:1.88976;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:0.997669"
+         id="path44470-2"
+         inkscape:flatsided="false"
+         sodipodi:sides="8"
+         sodipodi:cx="203.8373"
+         sodipodi:cy="-495.82043"
+         sodipodi:r1="6.9577351"
+         sodipodi:r2="3.4788675"
+         sodipodi:arg1="1.0427219"
+         sodipodi:arg2="1.435421"
+         inkscape:rounded="0"
+         inkscape:randomized="0"
+         transform="matrix(0.23098462,0,0,0.22113785,78.669591,35.703566)"
+         d="m 207.3431,-489.81049 -3.03629,-2.56291 -2.24021,3.28161 -0.33473,-3.95922 -3.90452,0.73638 2.56291,-3.03629 -3.28161,-2.24021 3.95922,-0.33473 -0.73638,-3.90452 3.03629,2.56291 2.24021,-3.28161 0.33473,3.95922 3.90452,-0.73638 -2.56291,3.03629 3.28161,2.24021 -3.95922,0.33473 z" />
+    </g>
+  </g>
+</svg>

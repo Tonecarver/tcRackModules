@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="6mm"
+   height="6mm"
+   viewBox="0 0 6 6"
+   version="1.1"
+   id="svg31263"
+   inkscape:version="1.1 (c68e22c387, 2021-05-23)"
+   sodipodi:docname="obstacle-spiral.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview31265"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:pageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:document-units="mm"
+     showgrid="false"
+     inkscape:zoom="1.4823793"
+     inkscape:cx="158.19163"
+     inkscape:cy="-81.962826"
+     inkscape:window-width="1500"
+     inkscape:window-height="1001"
+     inkscape:window-x="512"
+     inkscape:window-y="44"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="layer1" />
+  <defs
+     id="defs31260" />
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <g
+       id="g44446"
+       transform="translate(-96.913241,73.56207)"
+       style="display:inline">
+      <rect
+         style="display:inline;fill:#cccccc;fill-opacity:0.282051;stroke:#000000;stroke-width:0.0915631;stroke-opacity:0.997669"
+         id="rect20953-85-1-7-16-2-3"
+         width="5.9084373"
+         height="5.9084368"
+         x="96.959023"
+         y="-73.516289" />
+      <path
+         sodipodi:type="spiral"
+         style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:1.88976;stroke-miterlimit:4;stroke-dasharray:none"
+         id="path44235"
+         sodipodi:cx="-56.092815"
+         sodipodi:cy="-404.66962"
+         sodipodi:expansion="1"
+         sodipodi:revolution="3"
+         sodipodi:radius="9.4496174"
+         sodipodi:argument="-17.837358"
+         sodipodi:t0="0"
+         transform="matrix(0.21964584,0,0,0.22151118,112.06172,19.110657)"
+         d="m -56.092815,-404.66962 c 0.251107,0.40178 -0.417694,0.53671 -0.667772,0.41736 -0.677697,-0.32343 -0.581388,-1.26486 -0.166942,-1.7529 0.741346,-0.873 2.099224,-0.68195 2.838029,0.0835 1.084226,1.12329 0.788353,2.94595 -0.333887,3.92316 -1.49577,1.30247 -3.797182,0.89741 -5.008287,-0.5843 -1.524053,-1.86459 -1.007882,-4.65061 0.834717,-6.09342 2.231634,-1.74743 5.505271,-1.11917 7.178544,1.08513 1.971894,2.5977 1.230985,6.36071 -1.335547,8.26368 -2.963162,2.19705 -7.216662,1.34314 -9.348802,-1.58596 -2.422672,-3.32824 -1.455536,-8.07298 1.836377,-10.43393 3.693029,-2.64864 8.929558,-1.56811 11.519059,2.08679 2.874838,4.05763 1.680811,9.78633 -2.337206,12.60418" />
+    </g>
+  </g>
+</svg>
