@@ -1,0 +1,11 @@
+TODO items for Blur
+
+1. Parse input from wheel context popups in a format that matches the text output.
+   i.e. not just raw knob values 0..1
+
+Condsiderations for enhancements
+
+1. Use simd() intrinsics to speed up FFT frame manipulation. Process 4 bins at a time, 
+   particularly for trig functions like simd::cos(), simd::sqrt(), etc 
+   https://community.vcvrack.com/t/code-review-ramp/6955/16
+   

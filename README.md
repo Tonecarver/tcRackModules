@@ -100,13 +100,13 @@ The Traveler VCV Rack module is a generative sequencer. A set of rovers move thr
 
 \. = mirror down flip
 
-^  = wedge north     
+^  = wedge north - alternate CW and CCW turns for rovers traveling south     
 
-\>  = wedge east      
+\>  = wedge east - alternate CW and CCW turns for rovers traveling west    
 
-v  = wedge south     
+v  = wedge south - alternate CW and CCW turns for rovers traveling north 
 
-<  = wedge west      
+<  = wedge west - alternate CW and CCW turns for rovers traveling east
 
 square = reflect horizontal, wedge diagonals
 
