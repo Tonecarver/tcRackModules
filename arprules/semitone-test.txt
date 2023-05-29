@@ -1,0 +1,4 @@
+; harmtest.txt 
+
+S = $s=0 X 
+X = N $s+ X

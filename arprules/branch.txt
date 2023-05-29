@@ -1,0 +1,4 @@
+; branch.txt 
+;
+S = $h1=2 $h2=3 $h3=4 X
+X = N [+ N] [- N [- N] N] N [+ N][- N] X 

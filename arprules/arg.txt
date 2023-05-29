@@ -1,0 +1,6 @@
+; arg.txt
+
+S = $h1=3 $h2=5 $h3=7 X
+X = N + [ N - Hh1+ N - $h2+ N - $h3+ ] X
+
+; X(m) : ... tbd 

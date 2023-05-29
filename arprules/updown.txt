@@ -1,0 +1,5 @@
+; updown.txt
+S = $s=5 Z
+UP = N + $s-  
+DN = N - $s+ 
+Z = UP DN Z

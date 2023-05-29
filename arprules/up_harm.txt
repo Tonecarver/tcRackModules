@@ -1,0 +1,5 @@
+; up_harm.txt
+
+S = $h1=3 $h2=5 $h3=9  X
+X = N + Z Z + N + X
+Z = [ $h1* $h2* $h3* + N ]

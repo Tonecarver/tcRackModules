@@ -1,0 +1,6 @@
+; prob.txt 
+
+S = Z
+Z = X Z
+X(0.5) = $s=0 N N N N
+X(0.5) = $s=2 N N N N  

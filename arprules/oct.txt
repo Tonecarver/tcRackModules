@@ -1,0 +1,5 @@
+; oct.txt 
+
+S = $h1=5 $h2=7 $h3=-5 X 
+X = N + N [ + A ] + N
+A = $o+ N $h1* N $h2* N $h3* N

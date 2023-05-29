@@ -1,0 +1,6 @@
+; harmtest.txt 
+
+S = $s=0 X 
+X = FOUR UP X 
+FOUR = $s=0 N N N N 
+UP   = $s=2 N N N N 

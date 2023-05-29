@@ -1,0 +1,10 @@
+; up_two.txt
+
+; $h1=0  = unison
+; $h1=1  = unison
+; $h1=2  = next active degree above unison
+; $h1=3  = next active degree above $h1=2 
+
+S = $h1=3 $h2=5 $h3=7 X
+X = $h1=3  $h2=5 $h3=7 N [Y] + X
+Y = $h1=10 $h2=12 $h3=14 N

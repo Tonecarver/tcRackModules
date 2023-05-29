@@ -1,8 +1,8 @@
 #include "plugin.hpp"
 #include <math.hpp>
 #include <dsp/fft.hpp>
-#include "../lib/CircularBuffer.hpp"
-#include "../lib/List.hpp"
+#include "../lib/datastruct/CircularBuffer.hpp"
+#include "../lib/datastruct/List.hpp"
 
 const int MAX_FFT_FRAME_SIZE = 16384;
 const int DFLT_FFT_FRAME_SIZE = 2048;

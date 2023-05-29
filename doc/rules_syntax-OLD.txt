@@ -1,0 +1,48 @@
+  N      play a note (and harmonies if active)
+  +      pick the next note in the chord
+  -      pick the previous note in the chord
+  _      play a rest 
+  C      play the notes as a chord
+  G      play the notes as a gliss (like a strum) 
+
+  $h1+   pick the next scale interval for harmony 1  (use $h2 for harmony 2, $h3 for harmony 3)
+  $h1-   pick the previous scale interval for harmony 1
+  $h1*   pick a random scale interval for harmony 1
+  $h1!   set interval for harmony 1 to nominal (0)
+  $h1=4  set scale interval for harmony 1 to given value
+  
+  $s+    pick the next scale interval for the semitone offset
+  $s-    pick the previous scale interval for the semitone offset
+  $s*    pick a random scale interval for semitone offset
+  $s!    set scale interval for semitone to nominal (0)
+  $s=5   set scale interval for semitone to given value
+  
+  $v+    increase velocity zone
+  $v-    decrease velocty zone
+  $v*    pick a randome velocity zone
+  $v!    set velocity zone to nominal (96?) 
+  $v=7   set velocity zone to given value
+  
+  $o+    pick next octave offset
+  $o-    pick prev octave offset
+  $o*    pick a random octave offset
+  $o!    set octave offset to nominal (0) 
+  $o=-2  set octave offset to given value
+  
+  [      save context 
+  ]      restore context 
+  
+  {      begin expression
+  }      end expresssion
+
+
+
+ @funcname
+ /  semitone up
+ \  semitone down 
+ ^  octave up
+ |  up-down invert
+ ~  up-down nominal 
+  $symmbol [+|-|!|*|=] 
+
+  X(float) = N  + ...         Production Probability 

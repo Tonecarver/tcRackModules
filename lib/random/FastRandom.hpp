@@ -1,7 +1,14 @@
 #ifndef _tc_fast_random_hpp_
 #define _tc_fast_random_hpp_
 
-#include <math.hpp>
+#ifndef M_PI
+#  ifndef _USE_MATH_DEFINES
+#    define _USE_MATH_DEFINES  // M_PI 
+#  endif 
+#include <math.h>          // M_PI 
+#endif 
+
+#include <cstdint>
 
 struct FastRandom { 
     uint32_t x = 123456789;
@@ -30,6 +37,13 @@ struct FastRandom {
         t = x ^ (x << 11);   
         x = y; y = z; z = w;   
         return w = w ^ (w >> 19) ^ (t ^ (t >> 8));
+    }
+
+    void setSeed(int seed) {
+        x = seed >> 1;
+        y = seed >> 3;
+        z = (seed >> 16) | 10203040;
+        w = (seed ^ 0xa5a5a5a5);
     }
 };
 

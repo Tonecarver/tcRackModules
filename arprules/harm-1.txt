@@ -1,0 +1,4 @@
+; harm-1.txt 
+
+S = $h1=5 X
+X = N + X

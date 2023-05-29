@@ -1,0 +1,4 @@
+; falling-stars.txt
+
+S = $h1=3 $h2=2 $h3=1 X 
+X = N - $h3- $h2- $h1- X

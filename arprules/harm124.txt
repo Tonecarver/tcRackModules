@@ -1,0 +1,5 @@
+; harm124.txt
+
+S = $h1=1 $h2=3 X 
+Z = N $h1+ 
+X = Z Z Z Z + $h2+ X

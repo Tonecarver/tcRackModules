@@ -1,0 +1,21 @@
+; bill5.txt 
+;
+; --------------------------------------------------------------------
+;
+; try with C Hang > Sho
+; F G A 
+; notes reflect
+; harm cycle
+; harm 1 enabled
+; notes 0..2 octaves 
+; harm 0..1 octave
+; harm stagger or not, both sound good
+;
+; switch back and forth to Hang > Banshiki - Cho 
+; and/or Hang > Peyong Jo 
+
+S = $h1=3 $h2=3 $h2=3 X
+X = N + H1UP3 H2DN1 H3UP1 N + H2DN1 H3UP1 X
+H1UP2 = $h1+ $h1+ $h1+ 
+H2DN2 = $h2- 
+H3UP1 = $h3+

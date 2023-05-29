@@ -1,0 +1,3 @@
+; simple.txt 
+S = A
+A = N + A 

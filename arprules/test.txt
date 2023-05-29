@@ -1,0 +1,5 @@
+; test 
+
+S =  abc def
+abc = N + abc def 
+def = N + + def abc 

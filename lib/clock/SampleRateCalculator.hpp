@@ -60,7 +60,7 @@ struct SampleRateCalculator {
 	}
 
 	float samplesToBpm(float numSamples) const {
-		if (numSamples > 0) { 
+		if (numSamples > 0.f) { 
 			return (sampleRate * 60.f) / numSamples;
 		}
 		return 0.f;

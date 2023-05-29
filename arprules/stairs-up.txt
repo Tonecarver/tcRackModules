@@ -1,0 +1,4 @@
+; stairs-up.txt
+
+S = X
+X = N + + N - X 

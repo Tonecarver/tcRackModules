@@ -1,0 +1,80 @@
+From KVR: 
+https://www.kvraudio.com/forum/viewtopic.php?t=463269
+=====================================================
+
+The wiki link was for the general concept of L-Systems, turtle graphics, etc. The tcArpGen rules description doc is what you really need but that is a few days away. In the meantime here are some tips to get you started:
+
+- A rules file contains a set of productions.
+- Each production has a left-hand side and a right-hand side, separated by an '='
+- The left-hand side of the production is the production name
+- the right-hand side of the production are the production terms
+- There is a special production, call the start production whose name is S
+- The terms of a production define how the arpeggiator behaves. Some common terms are:
+CODE: SELECT ALL
+
+  N      play a note (and harmonies if active)
+  +      pick the next note in the chord
+  -      pick the previous note in the chord
+  _      play a rest 
+  C      play the notes as a chord
+  G      play the notes as a gliss (like a strum) 
+
+  $h1+   pick the next scale interval for harmony 1  (use $h2 for harmony 2, $h3 for harmony 3)
+  $h1-   pick the previous scale interval for harmony 1
+  $h1*   pick a random scale interval for harmony 1
+  $h1!   set interval for harmony 1 to nominal (0)
+  $h1=4  set scale interval for harmony 1 to given value
+  
+  $s+    pick the next scale interval for the semitone offset
+  $s-    pick the previous scale interval for the semitone offset
+  $s*    pick a random scale interval for semitone offset
+  $s!    set scale interval for semitone to nominal (0)
+  $s=5   set scale interval for semitone to given value
+  
+  $v+    increase velocity zone
+  $v-    decrease velocty zone
+  $v*    pick a randome velocity zone
+  $v!    set velocity zone to nominal (96?) 
+  $v=7   set velocity zone to given value
+  
+  $o+    pick next octave offset
+  $o-    pick prev octave offset
+  $o*    pick a random octave offset
+  $o!    set octave offset to nominal (0) 
+  $o=-2  set octave offset to given value
+  
+  [      save context 
+  ]      restore context 
+  
+  {      begin expression
+  }      end expresssion
+
+- so a production like 'X = N + N + _' would be interpreted as: play a note, pick next note in chord, play a note, pick next note in chord, play a rest'. Not too interesting on its own but can be combined and interwoven with other productions (or itself!) through recursion and expansion.
+- Expansion starts with a sequence of terms and creates a new sequence (typically a longer sequence but not always) by replacing each term with the terms from the production that matches the name of the term (if one exists). For example, if the rule is this:
+CODE: SELECT ALL
+
+   S = N + X
+   X = N - X
+   
+The expansions at the first few depths are this:
+depth 0: N + X (expansion always starts with production S)
+depth 1: N + N - X (the X term is replaced by the terms from the X production)
+depth 2: N + N - N + X (the X term is replaced by the terms from the X production)
+...
+Resulting in a sequence of alternating note up, note down actions
+
+That's a basic overview .. just keep in mind that
+- expansion always starts with the S production
+- expansion at each depth level replaces each single term with the entire sequence of terms from the production with matching name (if one exists).
+- the arp interpreter 'performs' the action for the terms that have meaning to it (e.g., N,+,-,$h2,etc.) and ignores the rest.
+
+You can use the term detail report (click the little empty square next to the Exp Len readout) to view the expanded term sequence. And tcArpGen will be getting an update to be more informative if it finds an error in the rules file.
+
+-- 
+I should point out that I tend to use this as a kind of "bubbler" to produce sequences with some subtle randomness and unpredictability to keep the sequence interesting. It can do predictable but my interest leans more towards the not-quite-predictable 'happy accident' side of the spectrum.
+
+Quite often, for me, depending on the rule set, using 1, 2 or 3 notes as input is sufficient to get some interesting results. Adding a dotted-eight delay after the synth/sampler can really fill out the sound space when using staggered harmonies. Slower tempos work well when feeding synths/samplers using sounds with longer/slower attack curves. Try sending the output to a drum instrument/sampler for creating rhythm beds. Send each harmony to a different channel/instrument, etc, etc .. most of all, have fun :)
+--
+The semitone strategy stays grayed-out until the rules contain at least one semitone action: $s+, $s-, $s!, $s*, or $s=value. The "semi-1" rules file has semitone actions. Loading that (via Rules > Load or drag-n-drop) should show the Semi strategy activated.
+--
+https://drive.google.com/file/d/1G-wcd6wqglM9gXmJ15x4XMht1P8j79PC/view

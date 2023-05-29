@@ -21,8 +21,19 @@ public:
    ~PtrArray()
    {
       delete mpList;
+      mpList = 0;
    }
 
+   inline bool isEmpty() const {
+      return mNumMembers == 0;
+   }
+
+   inline int size() const
+   {
+      return mNumMembers;
+   }
+
+   // TODO: delete this method, use size() instead
    inline int getNumMembers() const
    {
       return mNumMembers;
@@ -62,6 +73,10 @@ public:
       assert(pMember != 0);
       ensureCapacity(idx + 1);
       mpList[idx] = pMember;
+      if (mNumMembers <= idx)
+      {
+         mNumMembers = idx + 1;
+      }
    }
 
    // add member as last element 
@@ -76,14 +91,19 @@ public:
    // add member as first element 
    void insert(T * pMember)
    {
+      insertAt(0);
+   }
+
+   void insertAt(int idx, T * pMember)
+   {
       assert(pMember != 0);
       ensureCapacity(mNumMembers + 1);
       // shift contents up to make room 
-      for (int i = mNumMembers; i > 0; i--)
+      for (int i = mNumMembers; i > idx; i--)
       {
          mpList[i] = mpList[i-1];
       }
-      mpList[0] = pMember; // set new member as first 
+      mpList[idx] = pMember; // set new member at selected position
       mNumMembers++;
    }
 
@@ -93,13 +113,30 @@ public:
       int memberIndex = getIndexOf(pMember);
       if (memberIndex >= 0)
       {
-         for (int i = memberIndex; i < mNumMembers; i++)
+         removeAt(memberIndex);
+      }
+   }
+
+   T * removeFirst() 
+   {
+      return removeAt(0);
+   }
+
+   T * removeAt(int idx)
+   {
+      T * pMember = 0;
+      if (isValidIndex(idx))
+      {
+         pMember = mpList[idx];
+
+         for (int i = idx + 1; i < mNumMembers; i++)
          {
-            mpList[i-1] = mpList[i];
+            mpList[i - 1] = mpList[i];
          }
          mNumMembers--;
          mpList[mNumMembers] = 0; // clear the vacated spot at the end of the list 
       }
+      return pMember; 
    }
 
    T * removeLast()
@@ -117,10 +154,7 @@ public:
    // just discard, do not delete members 
    void clear()
    {
-      for (int i = 0; i < mNumMembers; i++)
-      {
-         mpList[i] = 0;
-      }
+      memset(mpList, 0, sizeof mpList[0] * mNumMembers);
       mNumMembers = 0;
    }
 
@@ -184,5 +218,100 @@ private:
 
 };
 
+template <class T>
+class PtrArrayIterator
+{
+public:
+	PtrArrayIterator( const PtrArray<T> &ptrArray )  
+   { 
+      mpPtrArray = &ptrArray; 
+      mIndex = 0;
+      getMember();
+   }
+
+	PtrArrayIterator( const PtrArray<T> * ptrArray )
+   { 
+      mpPtrArray = ptrArray; 
+      mIndex = 0;
+      getMember();
+   }
+
+	bool hasMore() const { return mpNext != 0; }
+	
+	T * getNext() // advance before returning
+	{
+		T * ptr = mpNext;
+		if (mpNext != 0) { 
+         mIndex++;
+			getMember();
+		}
+      return ptr;
+	}
+
+	void reset() 
+   { 
+      mIndex = 0; 
+      getMember(); 
+   } 
+
+private:
+   const PtrArray<T> * mpPtrArray;
+   int           mIndex;
+	T           * mpNext;
+
+   void getMember()
+   {
+      mpNext = (T*) (mIndex < mpPtrArray->getNumMembers()) ? mpPtrArray->getAt(mIndex) : 0 ;
+   }
+};
+
+
+// REVERSE iterator:  iterate over array from last element to first 
+template <class T>
+class PtrArrayReverseIterator
+{
+public:
+	PtrArrayReverseIterator( PtrArray<T> &ptrArray )  
+   { 
+      mpPtrArray = &ptrArray; 
+      mIndex = ptrArray.getNumMembers() - 1;
+      getMember();
+   }
+
+	PtrArrayReverseIterator( PtrArray<T> * ptrArray )
+   { 
+      mpPtrArray = ptrArray; 
+      mIndex = ptrArray->getNumMembers() - 1;
+      getMember();
+   }
+
+	bool hasMore() const { return mpNext != 0; }
+	
+	T * getNext() // advance before returning
+	{
+		T * ptr = mpNext;
+		if (mpNext != 0) { 
+         mIndex--;
+			getMember();
+		}
+      return ptr;
+	}
+
+	void reset() 
+   { 
+      mIndex = mpPtrArray->getNumMembers() - 1;
+      getMember();
+   } 
+
+private:
+   PtrArray<T> * mpPtrArray;
+   int           mIndex;
+	T           * mpNext;
+
+   void getMember()
+   {
+      mpNext = (T*) (mpPtrArray->isValidIndex(mIndex) ? mpPtrArray->getAt(mIndex) : 0);
+   }
+};
 
 #endif // _ptr_array_h_

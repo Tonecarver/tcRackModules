@@ -1,7 +1,7 @@
 {
   "slug": "Tonecarver",
   "name": "Tonecarver",
-  "version": "2.0.0",
+  "version": "2.0.3",
   "license": "GPL-3.0-only",
   "brand": "Tonecarver",
   "author": "Bill Davies",
@@ -34,6 +34,17 @@
       "name": "Traveler",
       "description": "Generative sequencer using rovers and obstacles to create evolving patterns",
       "tags": [
+        "Sequencer",
+        "Random"
+      ]
+    },
+    {
+      "slug": "tcArpGen",
+      "name": "tcArpGen",
+      "description": "L-System based arpeggiator/sequencer",
+      "tags": [
+        "Polyphonic",
+        "Arpeggiator",
         "Sequencer",
         "Random"
       ]

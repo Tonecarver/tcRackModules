@@ -3,16 +3,17 @@
 #include <widget/FramebufferWidget.hpp>
 #include <ui/Label.hpp>
 #include <osdialog.h>
-#include "../lib/FastRandom.hpp"
-#include "../lib/FloatCounter.hpp"
-#include "../lib/List.hpp"
-#include "../lib/ThreadSafeList.hpp"
-#include "../lib/PtrArray.hpp"
-#include "../lib/SampleRateCalculator.hpp"
+#include "../lib/clock/SampleRateCalculator.hpp"
+#include "../lib/datastruct/DelayList.hpp"
+#include "../lib/datastruct/ThreadSafeList.hpp"
+#include "../lib/datastruct/PtrArray.hpp"
+#include "../lib/dsp/FloatCounter.hpp"
+#include "../lib/random/FastRandom.hpp"
+#include "../lib/scale/SimpleScale.hpp"
+
 // #include "TravelerExpander.hpp"
 
 
-#include "../lib/SimpleScale.hpp"
 
 
 const int ROVER_FIELD_DIMENSION = 16;
@@ -1735,42 +1736,42 @@ struct CollisionTracker {
 
 // TODO: move to separate file 
 struct ClockWatcher {
-	SampleRateCalculator  sampleRateCalculator;
-	bool externalClockConnected; 
-	float externalClock_cv;	
+	SampleRateCalculator  mSampleRateCalculator;
+	bool mExternalClockConnected; 
+	float externalClock_cvPrev;	
 
-	float samplesSinceExternalLeadingEdge;
-	float samplesSinceClockPulse;
+	float mSamplesSinceExternalLeadingEdge;
+	float mSamplesSinceClockPulse;
 
 	ClockWatcher() {
-		samplesSinceClockPulse = 0.f;
-		externalClockConnected = false;
-		externalClock_cv = 0.5f; 	
-		samplesSinceExternalLeadingEdge = 0.f;
+		mSamplesSinceClockPulse = 0.f;
+		mExternalClockConnected = false;
+		externalClock_cvPrev = 0.5f; 	
+		mSamplesSinceExternalLeadingEdge = 0.f;
 	}
 
 	void setBeatsPerMinute(float beatsPerMinute) {
-		sampleRateCalculator.setBpm(beatsPerMinute);
+		mSampleRateCalculator.setBpm(beatsPerMinute);
 	}
 
 	void setSampleRate(float sampleRate) {
-		sampleRateCalculator.setSampleRate(sampleRate);
+		mSampleRateCalculator.setSampleRate(sampleRate);
 	}
 
 	float getBeatsPerMinute() const {
-		return sampleRateCalculator.bpm;
+		return mSampleRateCalculator.bpm;
 	}
 
 	float getSamplesPerBeat() const {
-		return sampleRateCalculator.getSamplesPerBeat();
+		return mSampleRateCalculator.getSamplesPerBeat();
 	}
 
 	float getSampleRate() const { 
-		return sampleRateCalculator.sampleRate;
+		return mSampleRateCalculator.sampleRate;
 	}
 
 	bool isConnectedToExternalClock() const {
-		return externalClockConnected;
+		return mExternalClockConnected;
 	}
 
 	void reset() { 
@@ -1778,55 +1779,55 @@ struct ClockWatcher {
 	}
 
 	bool isLeadingEdge() const {
-		return samplesSinceClockPulse <= 0.f;
+		return mSamplesSinceClockPulse <= 0.f;
 	}
 
 	void tick(Input & input) {
 
 		// Update BPM based on leading edge of external clock pulse 
 
-		samplesSinceClockPulse ++;
+		mSamplesSinceClockPulse ++;
 
 		if (input.isConnected()) {
-			samplesSinceExternalLeadingEdge ++;
+			mSamplesSinceExternalLeadingEdge ++;
 
 			//float clock_cv = rescale(input.getVoltage(), 0.1f, 9.9f, 0.f, 1.f);
 			float clock_cv = input.getVoltage();
 			// DEBUG("ClockWatcher: External Clock clock_cv %f, samples since %f", clock_cv, samplesSinceExternalLeadingEdge);
 
-			if (externalClock_cv <= 0.f && clock_cv >= 10.f) {
+			if (externalClock_cvPrev <= 0.f && clock_cv >= 10.f) {
 				//DEBUG("ClockWatcher: External Clock EDGE DETECTED: clock_cv %f, samples since external leading edge %f", clock_cv, samplesSinceExternalLeadingEdge);
 				// Transition low to high 
-				if (externalClockConnected) {
+				if (mExternalClockConnected) {
 					// have detected at least one full cycle 
 					// DEBUG("ClockWatcher: External Clock SET BPM clock_cv %f, samples since %f", clock_cv, samplesSinceExternalLeadingEdge);
-					sampleRateCalculator.setBpmFromNumSamples(samplesSinceExternalLeadingEdge);
-					samplesSinceClockPulse = sampleRateCalculator.getSamplesPerBeat();
+					mSampleRateCalculator.setBpmFromNumSamples(mSamplesSinceExternalLeadingEdge);
+					mSamplesSinceClockPulse = mSampleRateCalculator.getSamplesPerBeat();
 					//DEBUG("ClockWatcher: Computed BPM as %f, samplesPerBeat %f", sampleRateCalculator.bpm, sampleRateCalculator.getSamplesPerBeat());
 					//DEBUG("   samples since external leading edge = %f", samplesSinceExternalLeadingEdge);
 				}
-				samplesSinceExternalLeadingEdge = 0.f;
-				externalClockConnected = true;
+				mSamplesSinceExternalLeadingEdge = 0.f;
+				mExternalClockConnected = true;
 			}
-			externalClock_cv = clock_cv;
+			externalClock_cvPrev = clock_cv;
 		}
 		else {
-			samplesSinceExternalLeadingEdge = 0.f;
-			externalClockConnected = false;
+			mSamplesSinceExternalLeadingEdge = 0.f;
+			mExternalClockConnected = false;
 		}
 
-		float overshoot = samplesSinceClockPulse - sampleRateCalculator.getSamplesPerBeat();
+		float overshoot = mSamplesSinceClockPulse - mSampleRateCalculator.getSamplesPerBeat();
 		if (overshoot >= 0) {
-			samplesSinceClockPulse = overshoot; // capture the overshoot 
+			mSamplesSinceClockPulse = overshoot; // capture the overshoot 
 		}
 	}
 
 	void tick() {
-		externalClockConnected = false;
-		samplesSinceClockPulse += 1.f;
-		float overshoot = samplesSinceClockPulse - sampleRateCalculator.getSamplesPerBeat();
+		mExternalClockConnected = false;
+		mSamplesSinceClockPulse += 1.f;
+		float overshoot = mSamplesSinceClockPulse - mSampleRateCalculator.getSamplesPerBeat();
 		if (overshoot >= 0) {
-			samplesSinceClockPulse = overshoot; // capture the overshoot 
+			mSamplesSinceClockPulse = overshoot; // capture the overshoot 
 		}
 	}
 };

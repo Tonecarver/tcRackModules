@@ -1,0 +1,4 @@
+; harm_up.txt 
+
+S = $h1=0 $h2=2 $h3=3 X
+X = N + $h1+ $h2+ $h3+ X

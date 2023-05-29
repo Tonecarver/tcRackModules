@@ -1,0 +1,6 @@
+; harmony.txt 
+;
+S = $h1=3 $h2=5 $h3=9 X
+X = N + N + N + Z X P
+Z = $h1+ N $h2- N $h3- N $h3-
+P = N + N + $h1+ N + $h2- N Z X
