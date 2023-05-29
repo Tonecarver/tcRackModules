@@ -12,8 +12,7 @@
 
 #include "../../lib/scale/TwelveToneScale.hpp"
 #include "../../lib/arpeggiator/Stepper.hpp"
-#include "MidiPitchPool.hpp"
-
+// #include "MidiPitchPool.hpp"
 // #include "LiveMidiEvent.h"
 // #include "FunctionType.h"
 // #include "ArpTerm.h"
@@ -26,7 +25,6 @@
 #include "LSystem/LSystemProduction.hpp"
 
 #include "../../lib/datastruct/InstanceStack.hpp"
-// #include "../../lib/datastruct/List.hpp"
 #include "../../lib/datastruct/Stack.hpp"
 #include "../../lib/datastruct/PtrArray.hpp"
 #include "../../lib/datastruct/FreePool.hpp"

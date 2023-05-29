@@ -509,7 +509,7 @@ float LocalVariableValue::getValue(ExpressionContext * pContext)
 
 void LocalVariableValue::print(PrintWriter & writer)
 {
-   writer.print(" %s", getName());
+   writer.print(" %s", getName().c_str());
 }
 
 ExpressionNodeType LocalVariableValue::getNodeType()
@@ -543,7 +543,7 @@ float GlobalVariableValue::getValue(ExpressionContext * pContext)
 
 void GlobalVariableValue::print(PrintWriter & writer)
 {
-   writer.print(" $%s", getName());
+   writer.print(" $%s", getName().c_str());
 }
 
 ExpressionNodeType GlobalVariableValue::getNodeType()
@@ -950,7 +950,7 @@ float FunctionExpression::getValue(ExpressionContext * pContext)
 
 void FunctionExpression::print(PrintWriter & writer)
 {
-   writer.print("@%s", mpFunctionDescription->mName);
+   writer.print("@%s", mpFunctionDescription->mName.c_str());
    writer.print("(");
    DoubleLinkListIterator<Expression> iter(mpArgumentExpressionList->getArgumentExpressions());
    while (iter.hasMore())

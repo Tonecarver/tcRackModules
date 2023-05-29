@@ -5,6 +5,7 @@
 // #include "logger.hpp" // for DEBUG 
 #include "../../lib/datastruct/List.hpp"
 #include "../../lib/datastruct/PtrArray.hpp"
+#include "../../lib/datastruct/FreePool.hpp"
 
 class ActiveNote : public ListNode
 {

@@ -34,7 +34,7 @@ struct MidiPitchPool {
    int getNumNotes() const { return mNumNotes; }
 
    void addNote(int noteNumber) {
-      if (isFull) {
+      if (isFull()) {
          removeOldestNote();
       }
       insertNote(noteNumber);
