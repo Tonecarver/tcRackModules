@@ -13,13 +13,23 @@
 #include "ArpGen/NoteTable.hpp"
 #include "ArpGen/ChannelManager.hpp"
 #include "ArpGen/ArpTermCounter.hpp"
+#include "../lib/arpeggiator/Stepper.hpp"
+#include "../lib/clock/ClockWatcher.hpp"
+#include "../lib/scale/PolyScale.hpp"
 #include "../lib/scale/Scales.hpp"
 #include "../lib/scale/TwelveToneScale.hpp"
-#include "../lib/datastruct/DelayList.hpp"
+
+#include "../lib/cv/Voltage.hpp"
 #include "../lib/cv/CvEvent.hpp"
+#include "../lib/cv/Gate.hpp"
+#include "../lib/cv/PolyGatedCv.hpp"
+#include "../lib/cv/PolyVoltages.hpp"
+
+#include "../lib/datastruct/DelayList.hpp"
 #include "../lib/datastruct/FreePool.hpp"
-#include "../lib/clock/ClockWatcher.hpp"
-#include "../lib/arpeggiator/Stepper.hpp"
+
+#include "../lib/dsp/TriggerPool.hpp"
+
 
 const float DFLT_BPM = 120.f;
 
@@ -83,28 +93,6 @@ private:
 // 	pLsystem->write(writer);
 // }
 
-// voct range is -5.f .. 5.f
-int voctToPitch(float voct) {  
-	int pitch = round((voct + 5.f) * 12.f); // 0 .. 120 
-	return pitch;
-}
-
-int voctToOctave(float voct) {  
-	int octave = round(((voct + 5.f) * 12.f) / 10.f); // 10 octaves in 0 .. 120 
-	return octave;
-}
-
-int voctToDegreeRelativeToC(float voct) {  // degree, relative to C
-	int pitch = round((voct + 5.f) * 12.f);
-	int degree = pitch % 12;
-	return degree;
-}
-
-// pitch is 0..120
-// voct is -5..0..5 
-float pitchToVoct(int pitch) {
-	return (float(pitch) / 12.f) - 5.f;
-}
 
 // NOT USED YET 
 // float modulationVoltageToZeroToOne(float plusMinusFiveValue) {
@@ -123,21 +111,42 @@ template <class T>
 class OutputNoteWriter : public ArpNoteWriter {
 public:
 	T * pReceiver; 
-
-
-// TODO: take timing aspects out of the ArpPlayer 
-//       have player report delays and/or note length as percentage of step time
-
-	// virtual void noteOn(int channelNumber, int noteNumber, int velocity, int lengthSamples, int delaySamples) override {
-	// 	DEBUG("NoteWriter: channel %d, note %d, velocity %d, lengthSamples %d, dddelaySamples %d", channelNumber, noteNumber, velocity, lengthSamples, delaySamples);
-	// 	pReceiver->noteOn(channelNumber, noteNumber, velocity, lengthSamples, delaySamples);
-	// }
 	virtual void noteOn(int channelNumber, int noteNumber, int velocity) override {
 		// DEBUG("NoteWriter: channel %d, note %d, velocity %d", channelNumber, noteNumber, velocity);
 		pReceiver->noteOn(channelNumber, noteNumber, velocity);
 	}
 }; 
 
+
+struct ThemeManager {
+	int  selectedThemeId; 
+	bool mRedrawRequired;
+
+	ThemeManager() 
+	  : selectedThemeId(0)
+	  , mRedrawRequired(false)
+	{
+	}
+
+	void selectTheme(int themeId) {
+		if (themeId != selectedThemeId) {
+			selectedThemeId = themeId;
+			mRedrawRequired = true;
+		}
+	}
+
+	int getTheme() const {
+		return selectedThemeId;
+	}
+
+	bool redrawRequired() const { 
+		return mRedrawRequired; 
+	}
+
+	void redrawComplete() { 
+		mRedrawRequired = false; 
+	}
+};
 
 struct TcArpGen : Module {
 	enum ParamId {
@@ -293,7 +302,9 @@ struct TcArpGen : Module {
 	// -- Scale --
 	int activeScaleIdx = 0;
 	ScaleDefinition customScaleDefinition;
-	bool scaleRedrawRequired = true;
+	PolyVoltages    mExternalScaleVoltages;
+	PolyScale       mExternalScale;
+	bool            scaleRedrawRequired = true;
 
 	struct ScaleButton {
 		int mParamIdx;
@@ -315,8 +326,8 @@ struct TcArpGen : Module {
 		{ PITCH_B_PARAM,       PITCH_B_LIGHT       },
 	};
 
-	dsp::SchmittTrigger scaleButtonTriggers[12];
-	bool scaleButtonEnabled[12];
+	TriggerPool<TwelveToneScale::NUM_DEGREES_PER_SCALE> mScaleButtonTriggers;
+	bool scaleButtonEnabled[TwelveToneScale::NUM_DEGREES_PER_SCALE];
 
 	// -- random -- 
 	FastRandom mRandom;
@@ -329,7 +340,8 @@ struct TcArpGen : Module {
 	dsp::PulseGenerator mResetPulse;
 
 	// -- inputs --
-	NoteTable noteTable;  // Input Notes 
+	NoteTable noteTable;            // Input Notes 
+	PolyGatedCv polyInputGatedCv;   // Gated V/Oct ControlVoltages 
 
 	// -- L-System --
 	// Double-buffered to allow import of new rules without affecting 
@@ -376,39 +388,8 @@ struct TcArpGen : Module {
 	KeysOffStrategy     mKeysOffStrategy = KeysOffStrategy::KEYS_OFF_MAINTAIN_CONTEXT;
 	dsp::SchmittTrigger mKeysOffTrigger;
 	bool keysOffStrategyRedrawRequired = true;
-	// todo; delete 
-	// int keysOffStrategiesLightIds[KeysOffStrategy::kNUM_KEYS_OFF_STRATEGIES] = {
-	// 	IDLE_MAINTAIN_LED_LIGHT, 
-	// 	IDLE_2_LED_LIGHT, 
-	// };
 
 	int mStride = 1; // number of key positions to move on an increment or decrement operation
-
-	enum InterlockState {
-		INTERLOCK_OFF,
-		INTERLOCK_NORMALED,
-		INTERLOCK_NORMALED_INVERTED,
-		//
-		kNUM_INTERLOCK_STATES
-	}; 
-	InterlockState mOctaveInterlockRoot = InterlockState::INTERLOCK_OFF;
-	InterlockState mOctaveInterlockHarmony = InterlockState::INTERLOCK_OFF;
-	InterlockState mOctaveInterlockBoth = InterlockState::INTERLOCK_OFF;
-
-	InterlockState selectNextInterlockState(InterlockState in) {
-		int intval = in + 1;
-		if (intval >= InterlockState::kNUM_INTERLOCK_STATES) { 
-			intval = 0;
-		}
-		return (InterlockState) intval;
-	}
-
-	// bool mOctaveInterlockBoth = false; 
-	// bool mOctaveInterlockRoot = false; 
-	// bool mOctaveInterlockHarmony = false; 
-	dsp::SchmittTrigger mOctaveInterlockBothTrigger; 
-	dsp::SchmittTrigger mOctaveInterlockRootTrigger; 
-	dsp::SchmittTrigger mOctaveInterlockHarmonyTrigger; 
 
 	bool                mRunning = true; 
 	dsp::SchmittTrigger mRunTrigger; 
@@ -441,6 +422,9 @@ struct TcArpGen : Module {
 	};
 
 	float mSwingAmount = 0.f;
+	int delayPeriod = 0; // 0..3 to indicate which delay light tracer to light 
+	int delayTime = 0;   // numbr of samples until the next delay period 
+
 
 	float delayPercentageOptions[NUM_DELAY_SLOTS] = { 
   		0.f, 0.25f, 0.5f, 0.75f
@@ -468,7 +452,7 @@ struct TcArpGen : Module {
 	}
 
 
-	dsp::SchmittTrigger delayTriggers[4][NUM_DELAY_SLOTS]; // TODO const // cannot compile this into struct ?
+	TriggerPool<NUM_DELAY_SLOTS> mDelayTriggers[4]; // one arp + 3 harm 
 
 	struct DelaySelector { 
 		int delayIdx;
@@ -537,10 +521,12 @@ struct TcArpGen : Module {
 	int mParameterPollCount = 0;  // number of samples to wait to collect parameters 
 	const int PARAMETER_POLL_SAMPLES = 8;
 
+
+	// Panel Theme
+	ThemeManager mTheme;
+
 	// -- -- 
 	TcArpGen() {
-
-		DEBUG("ARP GEN: constructor() .. ");
 
 		struct ArpStyleQuantity : ParamQuantity {
 			char formattedValue[24];
@@ -794,7 +780,6 @@ struct TcArpGen : Module {
 
 		mOutputNoteWriter.pReceiver = this;
 
-
 		delayRedrawRequired = true;
 		scaleRedrawRequired = true;
 		arpPlayerRedrawRequired = true;		
@@ -875,9 +860,6 @@ struct TcArpGen : Module {
 			}
 		}
 
-		// TODO: this widget acts a bit different than the rest
-		// the others accept the button input only if the CV is not connected
-		// i.e. cv connection disables ui button push -- ok to diverge from that strategy here?
 		if (mKeysOffTrigger.process(params[MAINTAIN_CONTEXT_BUTTON_PARAM].getValue())) {
 			int strat = mKeysOffStrategy; 
 			strat = (strat + 1) % KeysOffStrategy::kNUM_KEYS_OFF_STRATEGIES;
@@ -974,9 +956,6 @@ struct TcArpGen : Module {
 
 		outputs[RUN_OUTPUT].setVoltage(mRunning ? 10.f : 0.f);
 
-static int delayPeriod = 0; // TODO move this 
-static int delayTime = 0; // TODO move this 
-
 		if (emitNotes) {
 			delayPeriod = 0;
 			float swingFactor = 0.25f + (mSwingAmount * ((1.f/3.f) - 0.25f));
@@ -991,10 +970,7 @@ static int delayTime = 0; // TODO move this
 
 		delayTime --;
 		if (delayTime <= 0) {
-			delayPeriod++;
-			if (delayPeriod >= 4) {
-				delayPeriod = 0;
-			}
+			delayPeriod = (delayPeriod + 1) & 0x03; // 0..3
 			float swingFactor = 0.25f + (mSwingAmount * ((1.f/3.f) - 0.25f));
 			delayTime = int(clock.getSamplesPerBeat() * swingFactor);
 			if (mIsDoubleTime) {
@@ -1007,67 +983,6 @@ static int delayTime = 0; // TODO move this
 		lights[ARP_DELAY_2_LED_LIGHT].setBrightness(mRunning && delayPeriod == 2);
 		lights[ARP_DELAY_3_LED_LIGHT].setBrightness(mRunning && delayPeriod == 3);
 
-		// lights[HARMONY_1_DELAY_0_LED_LIGHT].setBrightness(delayPeriod == 0);
-		// lights[HARMONY_1_DELAY_1_LED_LIGHT].setBrightness(delayPeriod == 1);
-		// lights[HARMONY_1_DELAY_2_LED_LIGHT].setBrightness(delayPeriod == 2);
-		// lights[HARMONY_1_DELAY_3_LED_LIGHT].setBrightness(delayPeriod == 3);
-
-		// lights[HARMONY_2_DELAY_0_LED_LIGHT].setBrightness(delayPeriod == 0);
-		// lights[HARMONY_2_DELAY_1_LED_LIGHT].setBrightness(delayPeriod == 1);
-		// lights[HARMONY_2_DELAY_2_LED_LIGHT].setBrightness(delayPeriod == 2);
-		// lights[HARMONY_2_DELAY_3_LED_LIGHT].setBrightness(delayPeriod == 3);
-
-		// // delayPercentageOptions[0] = 0.f; 
-		// lights[HARMONY_3_DELAY_0_LED_LIGHT].setBrightness(delayPeriod == 0);
-		// lights[HARMONY_3_DELAY_1_LED_LIGHT].setBrightness(delayPeriod == 1);
-		// lights[HARMONY_3_DELAY_2_LED_LIGHT].setBrightness(delayPeriod == 2);
-		// lights[HARMONY_3_DELAY_3_LED_LIGHT].setBrightness(delayPeriod == 3);
-
-		// delayPercentageOptions[1] = 0.25f + (swingAmount * ((1.f/3.f) - 0.25f)); 
-		// delayPercentageOptions[2] = 0.50f + (swingAmount * ((2.f/3.f) - 0.50f)); 
-		// delayPercentageOptions[3] = 0.75f + (swingAmount * ((3.f/3.f) - 0.75f)); // TODO: wrap to 0 ? 
-		// ARP_DELAY_0_LED_LIGHT,
-		// ARP_DELAY_1_LED_LIGHT,
-		// ARP_DELAY_2_LED_LIGHT,
-		// ARP_DELAY_3_LED_LIGHT,
-		// HARMONY_1_DELAY_0_LED_LIGHT,
-		// HARMONY_1_DELAY_1_LED_LIGHT,
-		// HARMONY_1_DELAY_2_LED_LIGHT,
-		// HARMONY_1_DELAY_3_LED_LIGHT,
-		// HARMONY_2_DELAY_0_LED_LIGHT,
-		// HARMONY_2_DELAY_1_LED_LIGHT,
-		// HARMONY_2_DELAY_2_LED_LIGHT,
-		// HARMONY_2_DELAY_3_LED_LIGHT,
-		// HARMONY_3_DELAY_0_LED_LIGHT,
-		// HARMONY_3_DELAY_1_LED_LIGHT,
-		// HARMONY_3_DELAY_2_LED_LIGHT,
-		// HARMONY_3_DELAY_3_LED_LIGHT,
-
-
-
-
-// 		outputs[CLOCK_OUTPUT].setVoltage(clock.isHigh() ? 10.f : 0.f);      // TODO: clock tracks high/low 
-			
-		// if (keysOffStrategyRedrawRequired) {
-		// 	for (int i = 0; i < KeysOffStrategy::kNUM_KEYS_OFF_STRATEGIES; i++) {
-		// 		lights[ keysOffStrategiesLightIds[i] ].setBrightness(i == mKeysOffStrategy);
-		// 	}
-		// 	keysOffStrategyRedrawRequired = false;
-		// }
-
-		// TODO: do this only if update required 
-		// lights[ROOT_OCTAVE_MIN_MAX_FOLLOW_LED_LIGHT + 0].setBrightness(mOctaveInterlockRoot == InterlockState::INTERLOCK_OFF);
-		// lights[ROOT_OCTAVE_MIN_MAX_FOLLOW_LED_LIGHT + 1].setBrightness(mOctaveInterlockRoot == InterlockState::INTERLOCK_NORMALED);
-		// lights[ROOT_OCTAVE_MIN_MAX_FOLLOW_LED_LIGHT + 2].setBrightness(mOctaveInterlockRoot == InterlockState::INTERLOCK_NORMALED_INVERTED);
-
-		// lights[HARMONY_OCTAVE_MIN_MAX_FOLLOW_LED_LIGHT + 0].setBrightness(mOctaveInterlockHarmony != InterlockState::INTERLOCK_OFF); 
-		// lights[HARMONY_OCTAVE_MIN_MAX_FOLLOW_LED_LIGHT + 1].setBrightness(mOctaveInterlockHarmony != InterlockState::INTERLOCK_NORMALED); 
-		// lights[HARMONY_OCTAVE_MIN_MAX_FOLLOW_LED_LIGHT + 2].setBrightness(mOctaveInterlockHarmony != InterlockState::INTERLOCK_NORMALED_INVERTED); 
-
-		// lights[ROOT_HARMONY_OCTAVE_FOLLOW_LED_LIGHT + 0].setBrightness(mOctaveInterlockBoth != InterlockState::INTERLOCK_OFF);
-		// lights[ROOT_HARMONY_OCTAVE_FOLLOW_LED_LIGHT + 1].setBrightness(mOctaveInterlockBoth != InterlockState::INTERLOCK_NORMALED);
-		// lights[ROOT_HARMONY_OCTAVE_FOLLOW_LED_LIGHT + 2].setBrightness(mOctaveInterlockBoth != InterlockState::INTERLOCK_NORMALED_INVERTED);
-
 	}
 
 	void onReset() override	
@@ -1077,26 +992,18 @@ static int delayTime = 0; // TODO move this
 		mRunTrigger.reset(); 
 		mRunButtonTrigger.reset(); 
 		mKeysOffTrigger.reset();
-		mOctaveInterlockBothTrigger.reset(); 
-		mOctaveInterlockRootTrigger.reset(); 
-		mOctaveInterlockHarmonyTrigger.reset(); 
 		mPerfectOctaveTrigger.reset();
 		mRandomizeHarmoniesTrigger.reset();
 		mResetButtonTrigger.reset();
 		mResetTrigger.reset(); 
 		mSortingOrderTrigger.reset(); 
 
-		for (int i = 0; i < 12; i++) {  // TODO const 
-			scaleButtonTriggers[i].reset();
-		}
+		mScaleButtonTriggers.reset();
 
 		for (int i = 0; i < NUM_DELAYS; i++) { // TODO: const, num delays
-			for (int s = 0; s < NUM_DELAY_SLOTS; s++) {
-				delayTriggers[i][s].reset(); 
-			}
+			mDelayTriggers[i].reset(); 
 		}
 
-		// TODO: reset triggers 
 		// TODO: put play cursor at position 0 
 	}
 	
@@ -1113,7 +1020,8 @@ static int delayTime = 0; // TODO move this
 
 		json_t* enabledNotes = json_array();
 		for (int i = 0; i < 12; i++) {
-			json_array_insert_new(enabledNotes, i, json_boolean(scaleButtonEnabled[i]));
+			json_array_insert_new(enabledNotes, i, json_boolean(mArpPlayer.getTwelveToneScale().isDegreeEnabled(i)));
+// 			json_array_insert_new(enabledNotes, i, json_boolean(scaleButtonEnabled[i]));
 		}
 		json_object_set_new(rootJ, "enabledNotes", enabledNotes);
 
@@ -1122,11 +1030,9 @@ static int delayTime = 0; // TODO move this
 			json_array_insert_new(delaySelectionsJ, i, json_integer(delaySelected[i]));
 		}
 		json_object_set_new(rootJ, "delaySelections", delaySelectionsJ);
-
 		json_object_set_new(rootJ, "octaveIncludesPerfect", json_integer(mOctaveIncludesPerfect));
-
 		json_object_set_new(rootJ, "rulesFilepath", json_string(mRulesFilepath.c_str()));
-
+		json_object_set_new(rootJ, "themeId", json_integer(mTheme.getTheme()));
         return rootJ;
 	}
 
@@ -1147,14 +1053,17 @@ static int delayTime = 0; // TODO move this
 
 		json_t* enabledNotes = json_object_get(rootJ, "enabledNotes");
 		if (enabledNotes) {
+			bool degreeEnabled[12]; // TODO: const 
 			for (int i = 0; i < 12; i++) {
 				json_t* enabledNote = json_array_get(enabledNotes, i);
 				if (enabledNote) {
-					scaleButtonEnabled[i] = json_boolean_value(enabledNote);
+					degreeEnabled[i] = json_boolean_value(enabledNote);
+// 					scaleButtonEnabled[i] = json_boolean_value(enabledNote);
 					// DEBUG("JSON: scaleButtonEnabled[%d] = %d", i, scaleButtonEnabled[i]);
 				}
 			}
-			setScaleFromUi();
+			mArpPlayer.getTwelveToneScale().setDegreesEnabled(degreeEnabled);
+			captureScaleEnableStates();
 			scaleRedrawRequired = true;
 		}
 
@@ -1183,8 +1092,11 @@ static int delayTime = 0; // TODO move this
 				}
 		}
 
+        jsonValue = json_object_get(rootJ, "themeId");
+		if (jsonValue) {
+			mTheme.selectTheme(json_integer_value(jsonValue));
+		}
 	}
-
 
 	void processStrideChanges() {
 		int stride = params[KEY_STRIDE_PARAM].getValue();  // 1..8 
@@ -1200,7 +1112,7 @@ static int delayTime = 0; // TODO move this
 
 			// DEBUG(" EXPANSION Depth changed: was %d, is %d", mExpansionDepth, newDepth);
 
-			// TODO: apply some HYSTERESIS to let the new value settle before doing all the  work to repace the terms 
+			// TODO: apply some HYSTERESIS to let the new value settle before doing all the work to repace the terms 
 
 			mExpansionDepth = newDepth; 
 			
@@ -1217,7 +1129,6 @@ static int delayTime = 0; // TODO move this
 		return (StepperAlgo) style;
 	}
 
-
 	SortingOrder incrementSortingOrder() {
 		int order = mArpPlayerSortingOrder + 1;
 		if (order >= SortingOrder::kNUM_SORTING_ORDER) {
@@ -1226,22 +1137,8 @@ static int delayTime = 0; // TODO move this
 		return (SortingOrder) order;
 	}
 
-	// TODO: delete 
-	// // incoming val is 0..1
-	// SortingOrder getSortingOrder(float valZeroToOne) {
-	// 	int strategy = round(valZeroToOne * float(SortingOrder::kNUM_SORTING_ORDER - 1));
-	// 	return (SortingOrder) strategy;
-	// }
-
 	// incoming val is 0..1
 	ScaleOutlierStrategy getScaleOutlierStrategy(float val) {
-//		float segmentSize = 1.f/3.f; // TODO: const, 
-//		int strategy = clamp(int(val / segmentSize), 0, 1);
-
-		// TODO .. remove divide
-		// if segment size is 1/3 and result is val/segment size,
-		// that should be the same as round(val * 3)
-
 		int strategy = round(val * 3.f);
 		strategy = clamp(strategy,0,2);
 		return (ScaleOutlierStrategy) strategy;
@@ -1252,28 +1149,25 @@ static int delayTime = 0; // TODO move this
 	}
 
 	void processPlayerConfigurationChanges() {
-		// direction
-
 		LSystemExecuteDirection  direction; 
 		if (inputs[PLAY_DIRECTION_CV_INPUT].isConnected()) {
 			direction = getPlayDirection((inputs[PLAY_DIRECTION_CV_INPUT].getVoltage() + 5.f) * 0.2f); // -5..5 => 0..2
 		} else {
 			direction = getPlayDirection(params[PLAY_DIRECTION_PARAM].getValue()); 
 		}
-
 		if (direction != mPlayDirection) {
 			mPlayDirection = direction;
 			mArpPlayer.setExecuteDirection(direction);
 		}
 
 		if (inputs[ ARP_PROBABILITY_CV_INPUT ].isConnected()) {
-			mNoteProbability = inputs[ ARP_PROBABILITY_CV_INPUT ].getVoltage() / 10.f; // 0..10 
+			mNoteProbability = inputs[ ARP_PROBABILITY_CV_INPUT ].getVoltage() * 0.1f; // 0..10 ==> 0..1
 		} else {
 			mNoteProbability = params[ ARP_PROBABILITY_PARAM ].getValue();
 		}
 
 		if (inputs[ HARMONY_PROBABILITY_CV_INPUT ].isConnected()) {
-			mHarmonyProbability = inputs[ HARMONY_PROBABILITY_CV_INPUT ].getVoltage() / 10.f; // 0..10 ==> 1..0 
+			mHarmonyProbability = inputs[ HARMONY_PROBABILITY_CV_INPUT ].getVoltage() * 0.1f; // 0..10 ==> 0..1 
 		} else {
 			mHarmonyProbability = params[ HARMONY_PROBABILITY_PARAM ].getValue();
 		}
@@ -1310,82 +1204,10 @@ static int delayTime = 0; // TODO move this
 			intervalStepSize = params[INTERVAL_STEP_SIZE_PARAM].getValue();
 		}
 		if (intervalStepSize != mIntervalStepSize) {
-			// DEBUG("Interval Step size changed: was %d, is %d", mIntervalStepSize, intervalStepSize);
 			mIntervalStepSize = intervalStepSize;
 			mArpPlayer.setIntervalStepSize(intervalStepSize);
 		}
-		// TODO: make this a global
-		// only set play if changed 
-		// this sets semitone and harmony step sizes .. how to set Arp Note increment size? 
 	}
-
-	// struct IntegerRange {
-	// 	int minValue = 0;
-	// 	int maxValue = 0;
-	// 	void set(int minVal, int maxVal) { 
-	// 		if (minVal <= maxVal) {
-	// 			minValue = minVal;
-	// 			maxValue = maxVal;
-	// 		} else { // swap 
-	// 			minValue = maxVal;
-	// 			maxValue = minVal;
-	// 		}
-	// 	}
-	// }; 
-	// IntegerRange rootOctaveRange; 
-	// IntegerRange harmonyOctaveRange; 
-
-
-	// struct LockableParams {
-	// 	float param_1_val; 
-	// 	float param_2_val;
-	// 	float param_1_delta; 
-	// 	float param_2_delta; 
-	// 	bool isLocked; 
-
-	// 	void scratch(float param_1_current, float param_2_current) { 
-	// 		param_1_delta = param_1_current - param_1_val;
-	// 		param_2_delta = param_2_current - param_2_val;
-	// 		if (isLocked) {
-	// 			float combined_delta = param_1_delta + param_2_delta;
-	// 			param_1_delta = combined_delta;
-	// 			param_2_delta = combined_delta;
-	// 		}
-	// 		param_1_val += param_1_delta; // TODOL: clamp? 
-	// 		param_2_val += param_2_delta; // TODOL: clamp? 
-	// 	}
-	// };
-
-	// LockableParams rootOctaveParams;
-	// LockableParams harmonyOctaveParams;
-
-/***
- * read all 4 octave values into effective_value[4] array 
- * if all octaves are locked 
- *    compute the deltas for each param
- *    combined_delta = add up all the deltas
- *    for each param
- *       effective value[i] += combined_delta
- * else 
- *     if root octaves are locked
- *        do same thing just for the root octave param pair 
- *     if harmony octaves are locked
- *        do same thing just for the harmony octave param pair 
- * 
- *  for each param 
- *    compute octave range for param based on effective value[i]
- * 
- * 
- * */	
-
-	// TODO take out all the interlock stuff
-	// use external control voltage to do that 
-
-	// float rootOctaveMin_prev = 0.f;
-	// float rootOctaveMax_prev = 0.f;
-
-	// float harmonyOctaveMin_prev = 0.f;
-	// float harmonyOctaveMax_prev = 0.f;
 
 	void processOctaveRangeChanges() {
 
@@ -1400,13 +1222,13 @@ static int delayTime = 0; // TODO move this
 			arpOctaveMin = inputs[ARP_OCTAVE_MIN_CV_INPUT].getVoltage() * 0.2f; // -5..5 ==> -1..1
 		} 
 		if (inputs[ARP_OCTAVE_MAX_CV_INPUT].isConnected()) {
-			arpOctaveMax = inputs[ARP_OCTAVE_MAX_CV_INPUT].getVoltage() * 0.2f; // +/- 5 => -1..1
+			arpOctaveMax = inputs[ARP_OCTAVE_MAX_CV_INPUT].getVoltage() * 0.2f; // +/- 5 ==> -1..1
 		} 
 		if (inputs[HARMONY_OCTAVE_MIN_CV_INPUT].isConnected()) {
 			harmonyOctaveMin = inputs[HARMONY_OCTAVE_MIN_CV_INPUT].getVoltage() * 0.2f;  // -5..5 ==> -1..1
 		} 
 		if (inputs[HARMONY_OCTAVE_MAX_CV_INPUT].isConnected()) {
-			harmonyOctaveMax = inputs[HARMONY_OCTAVE_MAX_CV_INPUT].getVoltage() * 02.f; // -5..5 ==> -1..1
+			harmonyOctaveMax = inputs[HARMONY_OCTAVE_MAX_CV_INPUT].getVoltage() * 0.2f; // -5..5 ==> -1..1
 		} 
 
 		// Perfect Octave 
@@ -1416,43 +1238,14 @@ static int delayTime = 0; // TODO move this
 			mArpPlayer.setOctaveIncludesPerfect(mOctaveIncludesPerfect);
 		}
 
-// TODO: do this only of the values changed 
-// arp note 
-
-static int counter = 0;
-bool verbose = false;
-counter--;
-if (counter <= 0) {  // TODO: remove 
-/// 	verbose = true;
-	counter = 48000 * 2;
-}
-
 		float octaveRange = 2.f;
 
-// Arp Octaves 
-		if (verbose) { 
-			DEBUG("process octaves: ARP octaveMin %f", arpOctaveMin);
-			DEBUG("process octaves: ARP octaveMax %f", arpOctaveMax);
-		}
-
+		// Arp Octaves 
 		int octaveMin = round(arpOctaveMin * octaveRange);		
 		int octaveMax = round(arpOctaveMax * octaveRange);		
 
 		if (octaveMin > octaveMax) {
 			octaveMin = octaveMax; // limit min to be <= max 
-
-			// int limitedMin = std::min(mArpOctaveMin, mArpOctaveMax);
-			// int limitedMax = std::max(mArpOctaveMin, mArpOctaveMax);
-			// mArpOctaveMin = limitedMin;
-			// mArpOctaveMax = limitedMax;
-			
-			// int temp = mArpOctaveMin; // swap 
-			// mArpOctaveMin = mArpOctaveMax;
-			// mArpOctaveMax= temp;
-		}
-
-		if (verbose) { 
-			DEBUG("process octaves: ARP octaves %d ... %d", octaveMin, octaveMax);
 		}
 
 		if (octaveMin != mArpOctaveMin || octaveMax != mArpOctaveMax) {
@@ -1462,12 +1255,7 @@ if (counter <= 0) {  // TODO: remove
 			mArpPlayer.setArpOctaveRange(mArpOctaveMin, mArpOctaveMax);
 		}
 
-// Harmony Octaves
-		if (verbose) { 
-			DEBUG("process octaves: HARMONY octaveMin %f", harmonyOctaveMin);
-			DEBUG("process octaves: HARMONY octaveMax %f", harmonyOctaveMax);
-		}
-
+		// Harmony Octaves
 		octaveMin = round(harmonyOctaveMin * octaveRange);		
 		octaveMax = round(harmonyOctaveMax * octaveRange);		
 
@@ -1475,21 +1263,14 @@ if (counter <= 0) {  // TODO: remove
 			octaveMin = octaveMax; // limit min to be <= max 
 		}
 
-		if (verbose) { 
-			DEBUG("process octaves: HARMONY octaves %d ... %d", octaveMin, octaveMax);
-		}
-
 		if (octaveMin != mHarmonyOctaveMin || octaveMax != mHarmonyOctaveMax) {
 			mHarmonyOctaveMin = octaveMin;
 			mHarmonyOctaveMax = octaveMax;
 			mArpPlayer.setHarmonyOctaveRange(mHarmonyOctaveMin, mHarmonyOctaveMax);
 		}
-
 	}
 
 	void processDelayChanges() { 
-
-/** experiment **/
 		float swing; 
 		if (inputs[DELAY_TIMING_CV_INPUT].isConnected()) {
 			swing = (inputs[DELAY_TIMING_CV_INPUT].getVoltage() + 5.f) * 0.1f; // -5..5 ==> 0..1
@@ -1503,26 +1284,24 @@ if (counter <= 0) {  // TODO: remove
 			// 	DEBUG("delay[%d] = %f", i, delayPercentage[i]);
 			// }
 		}
-/** end **/
+
 		// TODO: optimize this so that 1 delay channel is evaluated at a time
-		// instead of all 24 switches at every sample
+		// instead of all 16 switches at every sample
 
 		// TODO: if CVinput is connected, set the delay percentage from that
 
 		for (int i = 0; i < NUM_DELAYS; i++) { 
 			for (int s = 0; s < NUM_DELAY_SLOTS; s++) {
 				int paramId = delaySelectors[i].delaySwitchIds[s];
-				if (delayTriggers[i][s].process( params[paramId].getValue() )) {
-					// DEBUG("Delay %d, switch %d, trigger fired, delay selected was %d", i, s, delaySelected[i]);
+				if (mDelayTriggers[i].process(s, params[paramId].getValue() )) {
 					if (delaySelected[i] != s) { 
 						setDelaySelection(i, s);
 					}
-					// break; // exit inner loop 
 				}
 			}
 		}
 
-		for (int i = 0; i < NUM_DELAYS; i++) { // TODO: const
+		for (int i = 0; i < NUM_DELAYS; i++) {
 			int inputId = delaySelectors[i].inputId;
 			if (inputs[inputId].isConnected()) {
 				int selected = int(inputs[inputId].getVoltage() + 5.f) * 0.3f; // -5..5 ==> 0..3
@@ -1534,7 +1313,6 @@ if (counter <= 0) {  // TODO: remove
 
 	void updateDelaySwitches() { 
 
-
 		// Always redraw to get rid of the "disappearing switch" problem when 
 		// clicking on the already selected switch. The switch state toggles to 0 
 		// but the trigger does not react to it, so the switch stays in an "off" position
@@ -1542,14 +1320,14 @@ if (counter <= 0) {  // TODO: remove
 		// TODO: Could optimize this by having 4 flags, one per delay so that not all leds have to be redrawn when any one changes
 
 		if (delayRedrawRequired) {
-			for (int i = 0; i < NUM_DELAYS; i++) { // TODO: const
+			for (int i = 0; i < NUM_DELAYS; i++) {
 				for (int switchIdx = 0; switchIdx < NUM_DELAY_SLOTS; switchIdx++) { // TODO: const NUM_DELAY_OPTIONS 
 					int paramId = delaySelectors[i].delaySwitchIds[switchIdx];
 					params[ paramId ].setValue(delaySelected[i] == switchIdx);
 				}
 			}
 		} else {
-			for (int i = 0; i < NUM_DELAYS; i++) { // TODO: const
+			for (int i = 0; i < NUM_DELAYS; i++) {
 				int selected = delaySelected[i];
 				int paramId = delaySelectors[i].delaySwitchIds[selected];
 				params[ paramId ].setValue(1);
@@ -1560,35 +1338,32 @@ if (counter <= 0) {  // TODO: remove
 	}
 
 	void processScaleChanges() {
-
-		float rootVoct;
-
-		// -- Poly scale input 
 		if (inputs[POLY_SCALE_CV_INPUT].isConnected()) {
-			// TODO: check if voltages changed from last time before updating scale 
-			setScaleFromPoly(inputs[POLY_SCALE_CV_INPUT].getChannels(), inputs[POLY_SCALE_CV_INPUT].getVoltages());
-			rootVoct = inputs[POLY_SCALE_CV_INPUT].getVoltage(0); // -5...5
-		}
-		else if (inputs[ROOT_PITCH_CV_INPUT].isConnected()) {
-			rootVoct = inputs[ROOT_PITCH_CV_INPUT].getVoltage(); // -5..5
-		} else {
-			rootVoct = (params[ROOT_PITCH_PARAM].getValue() / 12.f) - 5.f; // 0..120 ==> -5..5
-		}
+			int numChannels = inputs[POLY_SCALE_CV_INPUT].getChannels();
+			float * voltages = inputs[POLY_SCALE_CV_INPUT].getVoltages();
+			if (mExternalScaleVoltages.process(numChannels, voltages)) {
+				setScaleFromPoly(numChannels, voltages);
+			}
+		} else { 
+			mExternalScaleVoltages.reset();
 
-		int rootPitch = voctToPitch(rootVoct);
-		if (rootPitch != mArpPlayer.getRootPitch()) {
-			// DEBUG("Root Pitch Changed: voct = %f, pitch = %d", rootVoct, rootPitch);
-			mArpPlayer.setRootPitch(rootPitch);
-			captureScaleEnableStates();
-			scaleRedrawRequired = true;			
-		}
+			float rootVoct;
+			if (inputs[ROOT_PITCH_CV_INPUT].isConnected()) {
+				rootVoct = inputs[ROOT_PITCH_CV_INPUT].getVoltage(); // -5..5
+			} else {
+				rootVoct = (params[ROOT_PITCH_PARAM].getValue() / 12.f) - 5.f; // 0..120 ==> -5..5
+			}
 
-		// -- UI Scale buttons 
-		if (! inputs[POLY_SCALE_CV_INPUT].isConnected()) {
+			int rootPitch = voctToPitch(rootVoct);
+			if (rootPitch != mArpPlayer.getRootPitch()) {
+				mArpPlayer.setRootPitch(rootPitch);
+				captureScaleEnableStates();
+				scaleRedrawRequired = true;			
+			}
+
 			bool scaleButtonChanged = false;
-			for (int i = 0; i < 12; i++) {  // TODO const 
-				if (scaleButtonTriggers[i].process( params[ scaleButtons[i].mParamIdx ].getValue())) {
-					// DEBUG("*** ScaleButton %d clicked (param %d), was enabled %d", i, scaleButtons[i].mParamIdx, scaleButtonEnabled[i]);
+			for (int i = 0; i < TwelveToneScale::NUM_DEGREES_PER_SCALE; i++) {
+				if (mScaleButtonTriggers.process( i, params[ scaleButtons[i].mParamIdx ].getValue())) {
 					scaleButtonEnabled[i] = (! scaleButtonEnabled[i]);
 					scaleButtonChanged = true;
 				}
@@ -1596,7 +1371,7 @@ if (counter <= 0) {  // TODO: remove
 			if (scaleButtonChanged) {
 				setScaleFromUi();
 			}
-		}
+		}		
 	}
 
 	void processHarmonyRandomization() {
@@ -1605,157 +1380,19 @@ if (counter <= 0) {  // TODO: remove
 		}
 	}
 
-// TODO: move this ?? 
-	struct NoteState { 
-		int pitch;
-		bool enabled;		
-	};
-
-enum GateState { 
-	GATE_CLOSED, 
-	GATE_LEADING_EDGE,
-	GATE_OPEN,
-	GATE_TRAILING_EDGE
-}; 
-
-GateState gateTransitionTable[2][4] = 
-{
-	// incoming 
-	// voltage     // ------------------- previous gate state ---------------------------------------
-	// state       // GATE_CLOSED         GATE_LEADING        GATE_OPEN           GATE_TRAILING
-    /* 0 CLOSED */   { GATE_CLOSED,       GATE_TRAILING_EDGE, GATE_TRAILING_EDGE, GATE_CLOSED       },
-    /* 1 OPEN   */   { GATE_LEADING_EDGE, GATE_OPEN,          GATE_OPEN,          GATE_LEADING_EDGE },
-}; 
-
-struct ChannelNote {
-	GateState mGateState = GATE_CLOSED; 
-	int  mPitch = 0; 
-}; 
-
-ChannelNote channelNotes[16]; // TODO: const
-// TODO: init 
-
-// bool pitchChange[16]; // TODO: move ... 
-
 	void receiveInputs() {
-
-//		memset(pitchChange, 0, sizeof(pitchChange)); 
-
-		int numVoctChannels = 0;
-		int numGateChannels = 0;
-
-		bool changeDetected = false; // gate or pitch change detected 
-		
-		// bool verbose = false; 		
-		// static int counter = 0;
-		// counter--; 
-		// if (counter <= 0) {
-		// 	counter = 10000;
-		// 	// verbose = true;
-		// }
-
-		// if (verbose) {
-		// 	DEBUG("ReceiveInput()");
-		// }
-
-// TODO: optimize: bool ChangeDetected = false;
-// compare num notes to the number of notes in the previous run 
-// 		int numActiveNotes = arpPlayer.getActiveNoteCount(); 
-
-		// Capture input pitches 
-		if (inputs[POLY_IN_CV_INPUT].isConnected()) {
-			numVoctChannels = inputs[POLY_IN_CV_INPUT].getChannels();
-			// if (verbose) {
-			// 	DEBUG("  numVoctChannels %d", numVoctChannels);
-			// }
-			for (int c = 0; c < numVoctChannels; c++) { 
-				int pitch = voctToPitch(inputs[POLY_IN_CV_INPUT].getVoltage(c));
-				if (pitch != channelNotes[c].mPitch) {
-					changeDetected = true;
-				}
-//				pitchChange[c] = (pitch != channelNotes[c].mPitch);
-				channelNotes[c].mPitch = pitch;
-				// if (verbose) {
-				// 	DEBUG("  channel[%d] pitch = %d, changed = %d", c, pitch, pitchChange[c]);
-				// }
-			}
-		}
-
-
-// TODO: !! use the Port::getPolyVoltage(c) method to distribute the gate if monophonic
-
-		if (inputs[POLY_GATE_IN_INPUT].isConnected()) {
-			numGateChannels = inputs[POLY_GATE_IN_INPUT].getChannels();
-		}
-
-// TODO: consider auto-normaling so that all poly input notes are treeated as if always gated on
-// if no cable is connected 
-
-		int numMutualChannels = MIN(numGateChannels, numVoctChannels); 
-		// if (verbose) {
-		// 	DEBUG("  numGateChannels %d", numGateChannels);
-		// 	DEBUG("  numMutualChannels %d", numMutualChannels);
-		// }
-
-		for (int c = 0; c < numMutualChannels; c++) { 
-			// if (verbose) {
-			// 	DEBUG("    Gate[%2d] state = %d", c, channelNotes[c].mGateState);
-			// 	DEBUG("              voltage %f", inputs[POLY_GATE_IN_INPUT].getVoltage(c));
-			// }
-			GateState gateStateBefore = channelNotes[c].mGateState;
-			channelNotes[c].mGateState = gateTransitionTable[ inputs[POLY_GATE_IN_INPUT].getVoltage(c) >= 9 ? 1 : 0 ][ channelNotes[c].mGateState ];
-			if (channelNotes[c].mGateState != gateStateBefore) {
-				changeDetected = true;
-			}
-
-			// if (verbose) {
-			// 	DEBUG("              state became = %d", channelNotes[c].mGateState);
-			// }
-		}
-
-		for (int c = numMutualChannels; c < 16; c++) {  // TODO: const, max_polyphony  
-			GateState gateStateBefore = channelNotes[c].mGateState;
-			channelNotes[c].mGateState = gateTransitionTable[ 0 ][ channelNotes[c].mGateState ]; // close the channel 
-			if (channelNotes[c].mGateState != gateStateBefore) {
-				changeDetected = true;
-			}
-			// if (verbose) {
-			// 	DEBUG("    Closing Gate[%2d] state = %d", c, channelNotes[c].mGateState);
-			// }
-		}
-
-		if (changeDetected) {
-			int notes[ 16 ]; // todo; CONST 
+		if (polyInputGatedCv.process(
+			inputs[POLY_IN_CV_INPUT].getChannels(),   inputs[POLY_IN_CV_INPUT].getVoltages(), 
+			inputs[POLY_GATE_IN_INPUT].getChannels(), inputs[POLY_GATE_IN_INPUT].getVoltages()))
+		{ 
+			int notes[ PORT_MAX_CHANNELS ]; // todo; max_channels
 			int numNotes = 0;
 
-			for (int c = 0; c < 16; c++) {  // TODO: const, max_polyphony  
-				// if (verbose) {
-				// 	DEBUG("   Channel[%2d]  gateState %d, pitchChange %d", c, channelNotes[c].mGateState, pitchChange[c]);
-				// }
-				if (channelNotes[c].mGateState == GATE_LEADING_EDGE) {
-					// DEBUG("- ReceiveInput: ADD note %d, channel %d", channelNotes[c].mPitch, c);
-					notes[numNotes] = channelNotes[c].mPitch;
-					numNotes++;
-
-	// 				arpPlayer.addNote(c, channelNotes[c].mPitch);
-				}
-				else if (channelNotes[c].mGateState == GATE_OPEN) {
-					// DEBUG("- ReceiveInput: UPDATE note %d, channel %d", channelNotes[c].mPitch, c);
-					notes[numNotes] = channelNotes[c].mPitch;
+			for (int c = 0; c < PORT_MAX_CHANNELS; c++) {  // TODO: const, max_channels
+				if (polyInputGatedCv.isGateOpen(c)) {
+					notes[numNotes] = voctToPitch( polyInputGatedCv.getControlVoltage(c) );
 					numNotes++;
 				}
-				// else if (channelNotes[c].mGateState == GATE_TRAILING_EDGE) {
-				// 	DEBUG("- ReceiveInput: REMOVE note %d, channel %d", channelNotes[c].mPitch, c);
-				// 	arpPlayer.removeNote(c);
-				// 	//removeNote(c, channelNotes[c].mPitch);
-				// }
-				// else if (channelNotes[c].mGateState == GATE_OPEN && pitchChange[c]) {
-				// 	DEBUG("- ReceiveInput: UPDATE note %d, channel %d", channelNotes[c].mPitch, c);
-				// 	arpPlayer.updateNote(c, channelNotes[c].mPitch);
-				// 	//updateNote(c, channelNotes[c].mPitch);
-				// 	notes[numNotes] = channelNotes[c].mPitch;
-				// 	numNotes++;
-				// }
 			}
 
 			mArpPlayer.setNotes(numNotes, notes);
@@ -1782,7 +1419,6 @@ ChannelNote channelNotes[16]; // TODO: const
 			}
 		}
 
-		// TODO: remove these loggings  .. 
 		// log_lsystem(mpLSystemPending, "File Load before expand: Pending");
 		// log_lsystem(mpLSystemActive,  "File Load before expand: Active");
 
@@ -1790,7 +1426,6 @@ ChannelNote channelNotes[16]; // TODO: const
 
   		expandLSystemSequence(mpLSystemPending); 
 
-		// TODO: remove these loggings  .. 
 		// log_lsystem(mpLSystemPending, "install, before swap: Pending");
 		// log_lsystem(mpLSystemActive,  "install, before swap: Active");
 
@@ -1801,7 +1436,6 @@ ChannelNote channelNotes[16]; // TODO: const
 
 		mpLSystemPending->clear();
 
-		// TODO: remove these loggings  .. 
 		// log_lsystem(mpLSystemPending, "install, after swap: Pending");
 		// log_lsystem(mpLSystemActive,  "install, after swap: Active");
 
@@ -1817,7 +1451,6 @@ ChannelNote channelNotes[16]; // TODO: const
 			installExpandedSequence(pExpandedTermSequence);
 		}
 
-		// TODO: remove these loggings  .. 
 		// log_lsystem(mpLSystemPending, "File Load after expand: Pending");
 		// log_lsystem(mpLSystemActive,  "File Load after expand: Active");
 	}
@@ -1834,22 +1467,9 @@ ChannelNote channelNotes[16]; // TODO: const
 			return; // no arp rules configured 
 		}
 
-	   	// double samplesPerBeat = mPlayRateQuantizer.getSamplesPerBeatDivision();
-	   	// rather than special case, always shorten the note by a bit
-	   	// double noteLengthSamples = mPlayRateQuantizer.computeSamplesPerBeatDivision(mArpPlayerNoteLengthBeatDivision);
-	  	// double noteLengthSamplesShortened = noteLengthSamples - (samplesPerBeat * 1.5/96.0); // minus one midi tick at 96 PPQ 
-
-
-	   	//double samplesPerBeat = clock.getSamplesPerBeat();
-   		//double noteLengthSamples = samplesPerBeat;   // TODO: redundant 
-   		//double noteLengthSamplesShortened = noteLengthSamples - (samplesPerBeat * 1.5/96.0); // minus one midi tick at 96 PPQ
-
-		//arpPlayer.setNominalNoteLengthSamples( int(noteLengthSamplesShortened) );
 		mArpPlayer.setNoteEnabled(true);
-		// arpPlayer.setNoteDelaySamples( 0 ); 
 		mArpPlayer.setNoteWriter(&mOutputNoteWriter);
 		mArpPlayer.setScaleOutlierStrategy(mOutlierStrategy);  // TODO: is this used anymore?
-
 
 // TODO: this is already done in ArpPlayer init .. 
 		for (int i = 0; i < ARP_PLAYER_NUM_HARMONIES; i++)
@@ -1868,24 +1488,6 @@ ChannelNote channelNotes[16]; // TODO: const
 		mArpPlayer.setSemitoneOvershootStrategy(mSemitoneIntervalStepperStrategy); 
 		mArpPlayer.setPlayOrder(mArpPlayerSortingOrder);   // TODO: if ArpAlgo = AsReceived ? set Asreceived: else set LowToHigh
 		mArpPlayer.setKeysOffStrategy(mKeysOffStrategy);
-
-		// Update sample delay to match the current clock and sample rate
-		// 
-		// TODO: fix this so that arpPlayer does not deal with samples at all
-		//  assign length and delays at the noteOn() callback when inserting
-		// CvEvents into the output queue
-		// AND ... optimize so that the delay times are pre-calulated on significant
-		//   events like sample rate change, clock rate change, etc
-
-		// float delayPct = delayPercentageOptions[ delaySelected[0] ];
-		// float delaySamples = samplesPerBeat * delayPct;  // TODO: hack .. for now 
-		// arpPlayer.setNoteDelaySamples(delaySamples);
-		// for (int i = 0; i < 3; i++) { // TODO const
-		// 	delayPct = delayPercentageOptions[ delaySelected[ (i+1) ] ];
-		// 	delaySamples = samplesPerBeat * delayPct;  // TODO: hack .. for now 
-		// 	arpPlayer.setHarmonyDelay(i, delaySamples);
-		// }
-
 
 
 		// arpPlayer.setScaleDescription(); 
@@ -1913,52 +1515,6 @@ ChannelNote channelNotes[16]; // TODO: const
 		// mArpPlayer.setHarmonyRelativeVelocity(mHarmonyRelativeVelocity);
 		// mArpPlayer.setNoteRelativeVelocity(mNoteRelativeVelocity);
 
-			//    // EXPERIMENT to auto-compute harmony delay based on swing amount  
-			//    if (mIsSwingDelayComputed)
-			//    {
-			//       // http://www.emathhelp.net/calculators/algebra-2/parabola-calculator/?ft=p3&p1x=0&p1y=0.5&p2x=0.66666&p2y=0.66666&p3x=1&p3y=0.5&p3dir=x&steps=on
-
-			//       //double numer = 416650000.0;    // TODO: precompute this 
-			//       //double denom = 555561111.0;
-			//       double A = -(416650000.0/555561111.0);
-			//       double B = 416650000.0/555561111.0;
-			//       double C = 0.5;
-
-			//       double x = mPlayRateQuantizer.getSwingAmount();
-			//       double y = (A*x*x) + (B*x) + C;
-
-			//       double autoSwing = y;
-
-			//       if (mNoteDelayPercent > 0.0)
-			//       {
-			//          mArpPlayer.setNoteDelaySamples( int( (autoSwing * samplesPerBeat) + 0.5) ); 
-			//       }
-
-			//       for (int i = 0; i < ARP_PLAYER_NUM_HARMONIES; i++)
-			//       {
-			//          if (mHarmonyStagger[i] > 0.0)
-			//          {
-			//             MYTRACE((  "Default stagger for harmony[%d] is %lf\n", i, mHarmonyStagger[i] ));
-
-			//             //double minStagger = 0.5;
-			//             //double maxStagger = 1.0;
-			//             //double autoSwing = minStagger + (mPlayRateQuantizer.getEffectiveSwingPercent() * (maxStagger - minStagger));
-
-			//             if (i == 0)
-			//             {
-			//                MYTRACE(( "  Computed swing:  swing is %lf%%,  x = %lf, autoDelay is %lf%%\n", 
-			//                   mPlayRateQuantizer.getEffectiveSwingPercent() * 100.0,
-			//                   x,
-			//                   autoSwing * 100.0 ));
-			//             }
-
-			//             double delaySamples = autoSwing * samplesPerBeat;
-			//             mArpPlayer.setHarmonyDelay(i, int(delaySamples));
-			//          }
-			//       }
-			//    }
-			//    // END EXPERIMENT
-
 		//mArpPlayer.setHarmonyStagger(mHarmonyStagger);
 		//double adjustedStagger = mHarmonyStagger * (mPlayRateQuantizer.getSamplesPerBeatDivision() / noteLengthSamplesShortened);
 
@@ -1979,31 +1535,10 @@ ChannelNote channelNotes[16]; // TODO: const
 
 	}
 
-
-/**
- * float delayTable[16];  // tells delay percentage for notes on each channel
- * 
- * delay percwentages:    0, 0.25, 0.333, 0.5, 0.667, 0.75, (1.0 ??)
- * 
- * void onDelayUpdate(int channel, float percentage) {
- *     delayTable[channel] = percentage;
- * 
- *     // if pre-computing this, need to recompute on delay percent change,
- *     // a clock rate change (i.e., step size change), or sample rate change  
- *     delaySamples[channel] = delayTable[channel] * stepSizeSamples
- * }
- * 
- * noteOn from arpPlayer tells channelNUmber, noteNumber
- * noteOnDelay = delayTable[channel] * stepSize; // Precompute this 
- * noteOffDelay = noteOnDelay + noteDuration
- * enqueue(noteOnDelay, NoteOn, channel, voltage)
- * enqueue(noteOffDelay, NoteOff, channel, voltage)
-*/
-	// void noteOn(int channelNumber, int noteNumber, int velocity, int lengthSamples, int delaySamples) {
 	void noteOn(int channelNumber, int noteNumber, int velocity) {
 		float voltage = pitchToVoct(noteNumber);
 
-		// TODO: pre-compute the delays per channel 
+		// TODO: pre-compute the delay samples per channel whever the clock, the swing, or the delay selection changes 
 		float delayPct = delayPercentageOptions[ delaySelected[channelNumber] ];
 		int delaySamples = int(clock.getSamplesPerBeat() * delayPct);  // TODO: hack .. for now 
 
@@ -2038,33 +1573,13 @@ ChannelNote channelNotes[16]; // TODO: const
 
 		outputQueue.passTime(1);
 
-		// static int counter = 0;
-		// counter --;
-		// if (counter <= 0 || outputQueue.hasExpiredItems()) {
-		// 	DEBUG(".. produceOutput()  queue size = %d", outputQueue.size());
-		// 	DoubleLinkListIterator<CvEvent> iter(outputQueue);
-		// 	while (iter.hasMore()) {
-		// 		CvEvent * pCvEvent = iter.getNext();
-		// 		DEBUG("  queue: cv event, type %d, chan %d, voltage %f, delay %ld", pCvEvent->eventType, pCvEvent->channel, pCvEvent->voltage, pCvEvent->delay);
-		// 	}
-		// }
-		// if (counter <= 0) {
-		// 	counter = 2000;
-		// }
-
-// bool show_voltages = false; // TODO: remove 
-
 		// Update output channel states
 		while (outputQueue.hasExpiredItems()) {
 			CvEvent * pCvEvent = outputQueue.getNextExpired();
 			if (pCvEvent->isLeadingEdge()) {
-//				DEBUG("------------ produceOutput: open gate %d, voltage %f", pCvEvent->channel, pCvEvent->voltage);
 				polyChannelManager[ pCvEvent->channel ].openGate(pCvEvent->voltage);
-//show_voltages = true;
 			} else {
-//				DEBUG("------------ produceOutput: close gate %d, voltage %f", pCvEvent->channel, pCvEvent->voltage);
 				polyChannelManager[ pCvEvent->channel ].closeGate(pCvEvent->voltage);				
-//show_voltages = true;
 			}
 			cvEventPool.retire(pCvEvent);
 		}
@@ -2072,44 +1587,20 @@ ChannelNote channelNotes[16]; // TODO: const
 		outputs[ GATE_POLY_OUTPUT ].setChannels(4);
 		outputs[ VOCT_POLY_OUTPUT ].setChannels(4);
 
-		for (int i = 0; i < 4; i++ ){ // TODO: constt  
-			if (polyChannelManager[i].mIsGateOpen) {
-				outputs[ outputPorts[i].gateId ].setVoltage(10.f);
-				outputs[ outputPorts[i].portId ].setVoltage(polyChannelManager[i].mActiveVoltage);
-				outputs[ GATE_POLY_OUTPUT ].setVoltage(10.f, i);
-				outputs[ VOCT_POLY_OUTPUT ].setVoltage(polyChannelManager[i].mActiveVoltage, i);
+		for (int c = 0; c < 4; c++ ){ // TODO: const
+			if (polyChannelManager[c].mIsGateOpen) {
+				outputs[ outputPorts[c].gateId ].setVoltage(10.f);
+				outputs[ outputPorts[c].portId ].setVoltage(polyChannelManager[c].mActiveVoltage);
+				outputs[ GATE_POLY_OUTPUT ].setVoltage(10.f, c);
+				outputs[ VOCT_POLY_OUTPUT ].setVoltage(polyChannelManager[c].mActiveVoltage, c);
 			} else {
-				outputs[ outputPorts[i].gateId ].setVoltage(0.f);
-				//outputs[ outputPorts[i].portId ].setVoltage(0.f);
-				outputs[ GATE_POLY_OUTPUT ].setVoltage(0.f, i);
-				//outputs[ VOCT_POLY_OUTPUT ].setVoltage(0.f, i);
+				outputs[ outputPorts[c].gateId ].setVoltage(0.f);
+				outputs[ GATE_POLY_OUTPUT ].setVoltage(0.f, c);
 			}
-			// if (show_voltages) {
-			// 	DEBUG("------------ produceOutput: Gate Voltage [%d] (port %d) = %f", i, outputPorts[i].gateId, outputs[ outputPorts[i].gateId ].getVoltage());
-			// }
 		}
-		// if (show_voltages) {
-		// 	DEBUG("------------ produceOutput: Poly Gate Voltage = %f, %f, %f, %f", 
-		// 		outputs[ GATE_POLY_OUTPUT ].getVoltage(0),
-		// 		outputs[ GATE_POLY_OUTPUT ].getVoltage(1),
-		// 		outputs[ GATE_POLY_OUTPUT ].getVoltage(2),
-		// 		outputs[ GATE_POLY_OUTPUT ].getVoltage(3));
-		// }
 	}
 
 	// -- Scale ----------------------------------------------------------------
-
-	// enum ScaleTypes {
-	// 	SCALE_BY_POLY = 0,
-	// 	SCALE_CUSTOM = 1,
-	// 	SCALE_PREDEFINED = 2
-	// };
-	// ScaleSource scaleSource = SCALE_PREDEFINED; 
-
-	// struct PolyVoltage { 
-	// 	float voltage[16]; // max polyphony 
-	// 	int   numActive = 0; 
-	// };
 
 	void setActiveScale(int scaleIdx) {
 		// DEBUG("Set Active Scale: %d", scaleIdx);
@@ -2128,32 +1619,11 @@ ChannelNote channelNotes[16]; // TODO: const
 		activeScaleIdx = scaleIdx;
 	}
 
-	void sortFloatAscending(int numMembers, float * values) {		// Bubble sort 
-        int j, k;
-        for (j = 0; j < (numMembers - 1); j++) {    
-            // Last i elements are already in place
-            for (k = 0; k < (numMembers - j - 1); k++) {
-                if (values[k] > values[k + 1]) {
-                    // swap these elements
-                    float tmp = values[k];
-                    values[k] = values[k + 1];
-                    values[k + 1] = tmp;
-                }
-            }
-        }
-	}
-
-
-	int poly_scale_channels = 0;
-	float poly_scale_voct[16] = {0.f,0.f,0.f,0.f,0.f,0.f,0.f,0.f,0.f,0.f,0.f,0.f,0.f,0.f,0.f,0.f}; 
-
-	float tmp_voct[16];  // TODO: use the getVoltages() form that takes a destination array to copy the floats into 
-
-	void showScaleEnabledStates_debug() { 
-		for (int i = 0; i < 12; i++) {
-			DEBUG("ScaleEnabled[ %2d ], %s", i, scaleButtonEnabled[i] ? "ENABLED" : "-disabled-");
-		}		
-	}
+	// void showScaleEnabledStates_debug() { 
+	// 	for (int i = 0; i < 12; i++) {
+	// 		DEBUG("ScaleEnabled[ %2d ], %s", i, scaleButtonEnabled[i] ? "ENABLED" : "-disabled-");
+	// 	}		
+	// }
 
 	void captureScaleEnableStates() {
 		// DEBUG("Capturing Scale Enabled states");
@@ -2161,78 +1631,52 @@ ChannelNote channelNotes[16]; // TODO: const
 			scaleButtonEnabled[i] = mArpPlayer.getTwelveToneScale().isPitchEnabledRelativeToC(i);
 		}		
 		scaleRedrawRequired = true;
-		// showScaleEnabledStates_debug();  // DEBUG 
+		//showScaleEnabledStates_debug();  // DEBUG 
+	}
+
+	void setPolyExternalScaleFormat(PolyScale::PolyScaleFormat format) { 
+		mExternalScale.setScaleFormat(format);
+	}
+
+	PolyScale::PolyScaleFormat getPolyExternalScaleFormat() const { 
+		return mExternalScale.getScaleFormat();
 	}
 
 	void setScaleFromPoly(int numChannels, float * polyVoct) {
-		// TODO: convert voct voltages to degrees 
-		// activeScale.clear()
-		// activeScale.setDegreeEnabled(x)
-		// Optimize: keep copy of polyVoct and compare so that scale rebuild is only done if polyVoct changes 
+		mExternalScale.computeScale(numChannels, polyVoct);
+		// todo: make show_external_scale() method 
+		// DEBUG(" SCALE ------------------ Tonic %d", mExternalScale.getTonic());
+		// for (int i = 0; i < 12; i++) { 
+		// 	DEBUG("   Degree[%2d] = %s", i, mExternalScale.containsDegree(i) ? "yes" : "-");
+		// }
 
-
-		// TODO: OPTIMIZE THIS ... ! 
-
-		for (int i = 0; i < numChannels; i++) {
-			tmp_voct[i] = polyVoct[i];
-		}
-
-		bool poly_scale_changed = false;
-		if (numChannels != poly_scale_channels) {
-			poly_scale_changed = true;
-		}
-		else
-		{
-			for (int i = 0; i < numChannels; i++) {
-				if (polyVoct[i] != poly_scale_voct[i]) { // TODO: epsilon test ?? 
-					poly_scale_changed = true;
-					break;
-				}
+		customScaleDefinition.clear();
+		customScaleDefinition.name = "PolyUi";
+		for (int i = 0; i < 12; i++) {
+			if (mExternalScale.containsDegree(i)) {
+				customScaleDefinition.addPitch( i );
 			}
 		}
 
-		if (poly_scale_changed) {
+// TODO: set active scale idx ?? 
 
-			// Save current state fotr future comparisons 
-			poly_scale_channels = numChannels;
+		activeScaleIdx = -1; // custom scale 
 
-			for (int i = 0; i < numChannels; i++) {
-				poly_scale_voct[i] = tmp_voct[i];
-			}
-
-			//DEBUG("-- Before Sort --");
-			sortFloatAscending(numChannels, tmp_voct);
-			//DEBUG("-- After Sort --");
-
-			int rootPitch = voctToPitch(tmp_voct[0]);
-
-			customScaleDefinition.clear();
-			customScaleDefinition.name = "PolyUi";
-			for (int i = 0; i < numChannels; i++) {
-				//DEBUG("  adding pitch for voct %f, pitch = %d", tmp_voct[i], voctToPitch(tmp_voct[i] - tmp_voct[0]));
-				customScaleDefinition.addPitch( voctToPitch(tmp_voct[i] - tmp_voct[0]) );
-			}
-
-			// DEBUG("Poly Scale Changed: num channels %d", numChannels); 
-			// for (int i = 0; i < customScaleDefinition.numPitches; i++) {
-			// 	DEBUG("   Poly Scale Degree: %d", customScaleDefinition.pitches[i]); 
-			// }			
-			mArpPlayer.setRootPitch(rootPitch);   // TODO: combine tonic and scale set into single call to avoid computing table twice 
-			mArpPlayer.setScaleDefinition(&customScaleDefinition);
-			captureScaleEnableStates();
-			scaleRedrawRequired = true; 
-		}
+		// TODO: combine tonic and scale set into single call to avoid computing table twice 
+		mArpPlayer.setRootPitch(mExternalScale.getTonic());
+		mArpPlayer.setScaleDefinition(&customScaleDefinition);
+		captureScaleEnableStates();
+		scaleRedrawRequired = true; 
 	}
 
-	void setScaleFromUi() {
-		
+	void setScaleFromUi() {		
 		// DEBUG("setScaleFromUi():");
-		// showScaleEnabledStates(); // DEBUG 
+		// showScaleEnabledStates_debug(); // DEBUG 
 
 		customScaleDefinition.clear();
 		customScaleDefinition.name = "Custom"; 
 		int rootDegree = mArpPlayer.getTwelveToneScale().getTonicPitch() % 12;
-		for (int i = 0; i < 12; i++) {
+		for (int i = 0; i < TwelveToneScale::NUM_DEGREES_PER_SCALE; i++) {
 			if (scaleButtonEnabled[i]) {
 				int degree = i - rootDegree;  // transpose into 0-based intervals, based on current tonic pitch 
 				if (degree < 0) {
@@ -2343,22 +1787,22 @@ ChannelNote channelNotes[16]; // TODO: const
 #define _UI_POS_DOUBLE_TIME_BUTTON_PARAM   mm2px(Vec(189.632, 52.214))
 #define _UI_POS_DOUBLE_TIME_COUNT_PARAM   mm2px(Vec(200.762, 50.301))
 #define _UI_POS_EXPANSION_DEPTH_PARAM   mm2px(Vec(172.127, 22.339))
-#define _UI_POS_HARMONY_1_DELAY_0_PARAM   mm2px(Vec(48.007, 73.995))
-#define _UI_POS_HARMONY_1_DELAY_1_PARAM   mm2px(Vec(54.647, 73.995))
-#define _UI_POS_HARMONY_1_DELAY_2_PARAM   mm2px(Vec(61.287, 73.995))
-#define _UI_POS_HARMONY_1_DELAY_3_PARAM   mm2px(Vec(67.927, 73.995))
-#define _UI_POS_HARMONY_2_DELAY_0_PARAM   mm2px(Vec(48.007, 85.806))
-#define _UI_POS_HARMONY_2_DELAY_1_PARAM   mm2px(Vec(54.647, 85.806))
-#define _UI_POS_HARMONY_2_DELAY_2_PARAM   mm2px(Vec(61.287, 85.806))
-#define _UI_POS_HARMONY_2_DELAY_3_PARAM   mm2px(Vec(67.927, 85.806))
-#define _UI_POS_HARMONY_3_DELAY_0_PARAM   mm2px(Vec(48.007, 97.395))
-#define _UI_POS_HARMONY_3_DELAY_1_PARAM   mm2px(Vec(54.647, 97.395))
-#define _UI_POS_HARMONY_3_DELAY_2_PARAM   mm2px(Vec(61.287, 97.395))
-#define _UI_POS_HARMONY_3_DELAY_3_PARAM   mm2px(Vec(67.927, 97.395))
+#define _UI_POS_HARMONY_1_DELAY_0_PARAM   mm2px(Vec(48.007, 72.563))
+#define _UI_POS_HARMONY_1_DELAY_1_PARAM   mm2px(Vec(54.647, 72.563))
+#define _UI_POS_HARMONY_1_DELAY_2_PARAM   mm2px(Vec(61.287, 72.563))
+#define _UI_POS_HARMONY_1_DELAY_3_PARAM   mm2px(Vec(67.927, 72.563))
+#define _UI_POS_HARMONY_2_DELAY_0_PARAM   mm2px(Vec(48.007, 84.373))
+#define _UI_POS_HARMONY_2_DELAY_1_PARAM   mm2px(Vec(54.647, 84.373))
+#define _UI_POS_HARMONY_2_DELAY_2_PARAM   mm2px(Vec(61.287, 84.373))
+#define _UI_POS_HARMONY_2_DELAY_3_PARAM   mm2px(Vec(67.927, 84.373))
+#define _UI_POS_HARMONY_3_DELAY_0_PARAM   mm2px(Vec(48.007, 95.963))
+#define _UI_POS_HARMONY_3_DELAY_1_PARAM   mm2px(Vec(54.647, 95.963))
+#define _UI_POS_HARMONY_3_DELAY_2_PARAM   mm2px(Vec(61.287, 95.963))
+#define _UI_POS_HARMONY_3_DELAY_3_PARAM   mm2px(Vec(67.927, 95.963))
 #define _UI_POS_HARMONY_OCTAVE_MAX_PARAM   mm2px(Vec(23.037, 81.154))
 #define _UI_POS_HARMONY_OCTAVE_MIN_PARAM   mm2px(Vec(9.279, 81.154))
 #define _UI_POS_HARMONY_OVERSHOOT_STRATEGY_PARAM   mm2px(Vec(102.455, 81.141))
-#define _UI_POS_HARMONY_PROBABILITY_PARAM   mm2px(Vec(86.649, 81.141))
+#define _UI_POS_HARMONY_PROBABILITY_PARAM   mm2px(Vec(86.649, 81.154))
 #define _UI_POS_INTERVAL_STEP_SIZE_PARAM   mm2px(Vec(120.013, 81.141))
 #define _UI_POS_KEY_ORDER_BUTTON_PARAM   mm2px(Vec(77.084, 11.082))
 #define _UI_POS_KEY_STRIDE_PARAM   mm2px(Vec(120.013, 52.821))
@@ -2392,9 +1836,9 @@ ChannelNote channelNotes[16]; // TODO: const
 #define _UI_POS_CLOCK_CV_INPUT   mm2px(Vec(8.458, 14.841))
 #define _UI_POS_DELAY_TIMING_CV_INPUT   mm2px(Vec(168.937, 42.502))
 #define _UI_POS_DOUBLE_TIME_CV_INPUT   mm2px(Vec(189.632, 42.502))
-#define _UI_POS_HARMONY_1_DELAY_CV_INPUT   mm2px(Vec(38.869, 73.995))
-#define _UI_POS_HARMONY_2_DELAY_CV_INPUT   mm2px(Vec(38.869, 85.806))
-#define _UI_POS_HARMONY_3_DELAY_CV_INPUT   mm2px(Vec(38.495, 97.395))
+#define _UI_POS_HARMONY_1_DELAY_CV_INPUT   mm2px(Vec(38.869, 72.563))
+#define _UI_POS_HARMONY_2_DELAY_CV_INPUT   mm2px(Vec(38.869, 84.373))
+#define _UI_POS_HARMONY_3_DELAY_CV_INPUT   mm2px(Vec(38.495, 95.963))
 #define _UI_POS_HARMONY_OCTAVE_MAX_CV_INPUT   mm2px(Vec(23.037, 92.795))
 #define _UI_POS_HARMONY_OCTAVE_MIN_CV_INPUT   mm2px(Vec(9.279, 92.795))
 #define _UI_POS_HARMONY_OVERSHOOT_STRATEGY_CV_INPUT   mm2px(Vec(102.455, 91.748))
@@ -2414,19 +1858,19 @@ ChannelNote channelNotes[16]; // TODO: const
 #define _UI_POS_RUN_CV_INPUT   mm2px(Vec(34.97, 14.841))
 #define _UI_POS_SEMITONE_OVERSHOOT_STRATEGY_CV_INPUT   mm2px(Vec(140.714, 42.502))
 
-#define _UI_POS_CLOCK_OUTPUT   mm2px(Vec(214.037, 81.906))
+#define _UI_POS_CLOCK_OUTPUT   mm2px(Vec(210.333, 81.906))
 #define _UI_POS_END_OF_CYCLE_OUTPUT   mm2px(Vec(203.411, 19.073))
-#define _UI_POS_GATE_FOUR_OUTPUT   mm2px(Vec(214.316, 103.16))
-#define _UI_POS_GATE_ONE_OUTPUT   mm2px(Vec(174.171, 103.16))
-#define _UI_POS_GATE_POLY_OUTPUT   mm2px(Vec(151.792, 103.16))
-#define _UI_POS_GATE_THREE_OUTPUT   mm2px(Vec(201.085, 103.16))
-#define _UI_POS_GATE_TWO_OUTPUT   mm2px(Vec(187.488, 103.16))
-#define _UI_POS_RUN_OUTPUT   mm2px(Vec(198.418, 81.906))
-#define _UI_POS_VOCT_FOUR_OUTPUT   mm2px(Vec(214.316, 116.046))
-#define _UI_POS_VOCT_ONE_OUTPUT   mm2px(Vec(174.171, 116.046))
-#define _UI_POS_VOCT_POLY_OUTPUT   mm2px(Vec(151.792, 116.046))
-#define _UI_POS_VOCT_THREE_OUTPUT   mm2px(Vec(201.085, 116.046))
-#define _UI_POS_VOCT_TWO_OUTPUT   mm2px(Vec(187.488, 116.046))
+#define _UI_POS_GATE_FOUR_OUTPUT   mm2px(Vec(210.612, 103.16))
+#define _UI_POS_GATE_ONE_OUTPUT   mm2px(Vec(170.467, 103.16))
+#define _UI_POS_GATE_POLY_OUTPUT   mm2px(Vec(153.542, 103.16))
+#define _UI_POS_GATE_THREE_OUTPUT   mm2px(Vec(197.381, 103.16))
+#define _UI_POS_GATE_TWO_OUTPUT   mm2px(Vec(183.783, 103.16))
+#define _UI_POS_RUN_OUTPUT   mm2px(Vec(194.714, 81.906))
+#define _UI_POS_VOCT_FOUR_OUTPUT   mm2px(Vec(210.612, 116.046))
+#define _UI_POS_VOCT_ONE_OUTPUT   mm2px(Vec(170.467, 116.046))
+#define _UI_POS_VOCT_POLY_OUTPUT   mm2px(Vec(153.542, 116.046))
+#define _UI_POS_VOCT_THREE_OUTPUT   mm2px(Vec(197.381, 116.046))
+#define _UI_POS_VOCT_TWO_OUTPUT   mm2px(Vec(183.783, 116.046))
 
 #define _UI_POS_ARP_DELAY_0_LED_LIGHT   mm2px(Vec(47.633, 57.733))
 #define _UI_POS_ARP_DELAY_1_LED_LIGHT   mm2px(Vec(54.647, 57.733))
@@ -2435,18 +1879,6 @@ ChannelNote channelNotes[16]; // TODO: const
 #define _UI_POS_DIRECTION_FORWARD_LED_LIGHT   mm2px(Vec(130.663, 25.027))
 #define _UI_POS_DIRECTION_REVERSE_LED_LIGHT   mm2px(Vec(121.869, 25.027))
 #define _UI_POS_DOUBLE_TIME_LED_LIGHT   mm2px(Vec(189.632, 52.214))
-// #define _UI_POS_HARMONY_1_DELAY_0_LED_LIGHT   mm2px(Vec(47.871, 68.974))
-// #define _UI_POS_HARMONY_1_DELAY_1_LED_LIGHT   mm2px(Vec(54.511, 68.974))
-// #define _UI_POS_HARMONY_1_DELAY_2_LED_LIGHT   mm2px(Vec(61.151, 68.974))
-// #define _UI_POS_HARMONY_1_DELAY_3_LED_LIGHT   mm2px(Vec(67.791, 68.974))
-// #define _UI_POS_HARMONY_2_DELAY_0_LED_LIGHT   mm2px(Vec(47.871, 80.88))
-// #define _UI_POS_HARMONY_2_DELAY_1_LED_LIGHT   mm2px(Vec(54.511, 80.88))
-// #define _UI_POS_HARMONY_2_DELAY_2_LED_LIGHT   mm2px(Vec(61.151, 80.88))
-// #define _UI_POS_HARMONY_2_DELAY_3_LED_LIGHT   mm2px(Vec(67.791, 80.88))
-// #define _UI_POS_HARMONY_3_DELAY_0_LED_LIGHT   mm2px(Vec(47.871, 92.522))
-// #define _UI_POS_HARMONY_3_DELAY_1_LED_LIGHT   mm2px(Vec(54.511, 92.522))
-// #define _UI_POS_HARMONY_3_DELAY_2_LED_LIGHT   mm2px(Vec(61.151, 92.522))
-// #define _UI_POS_HARMONY_3_DELAY_3_LED_LIGHT   mm2px(Vec(67.791, 92.522))
 #define _UI_POS_KEY_ORDER_AS_RECEIVED_LED_LIGHT   mm2px(Vec(77.159, 25.953))
 #define _UI_POS_KEY_ORDER_HIGH_TO_LOW_LED_LIGHT   mm2px(Vec(77.159, 21.72))
 #define _UI_POS_KEY_ORDER_LOW_TO_HIGH_LED_LIGHT   mm2px(Vec(77.159, 17.646))
@@ -2595,12 +2027,77 @@ struct ScaleMenu : MenuItem {
 	}
 };
 
+template <class MODULE>
+struct PolyExternalScaleFormatMenu : MenuItem {
+	MODULE * module;
+
+    struct PolyExternalScaleFormatSubItem : MenuItem {
+		MODULE * module;
+		PolyScale::PolyScaleFormat format;
+		void onAction(const event::Action& e) override {
+ 			module->setPolyExternalScaleFormat(format);
+		}
+	};
+
+	Menu *createChildMenu() override {
+		Menu *menu = new Menu;
+
+		// TODO: get names from the PolyScale class 
+		std::string formatNames[PolyScale::PolyScaleFormat::kNum_POLY_SCALE_FORMAT] = {
+			"Poly Ext Scale", 
+			"Sorted V/Oct"};
+
+		PolyScale::PolyScaleFormat formats[PolyScale::PolyScaleFormat::kNum_POLY_SCALE_FORMAT] = {
+			PolyScale::PolyScaleFormat::POLY_EXT_SCALE,
+			PolyScale::PolyScaleFormat::SORTED_VOCT_SCALE
+		};
+
+		for (int i = 0; i < PolyScale::PolyScaleFormat::kNum_POLY_SCALE_FORMAT; i++) {
+			PolyExternalScaleFormatSubItem * pSubItem = createMenuItem<PolyExternalScaleFormatSubItem>(formatNames[i]);
+			pSubItem->format = formats[i];
+			pSubItem->rightText = CHECKMARK(module->getPolyExternalScaleFormat() == formats[i]);
+			pSubItem->module = module;
+			menu->addChild(pSubItem);
+		}
+		return menu;
+	}
+};
+
+
+template <class MODULE>
+struct ThemeMenu : MenuItem {
+	MODULE * module;
+
+    struct ThemeSubItem : MenuItem {
+		MODULE * module;
+		int themeId;
+		void onAction(const event::Action& e) override {
+			module->mTheme.selectTheme(themeId);
+		}
+	};
+
+	Menu *createChildMenu() override {
+		Menu *menu = new Menu;
+
+		std::string themeNames[3] = { "Silver", "Grey", "Blue" };
+
+		for (int i = 0; i < 3; i++) {
+			ThemeSubItem * pThemeSubItem = createMenuItem<ThemeSubItem>(themeNames[i]);
+ 			pThemeSubItem->rightText = CHECKMARK(module->mTheme.getTheme() == i);
+			pThemeSubItem->module = module;
+			pThemeSubItem->themeId = i;
+ 			menu->addChild(pThemeSubItem);
+		}
+		return menu;
+	}
+};
+
 struct TcArpGenWidget : ModuleWidget {
 	TcArpGenWidget(TcArpGen* module) {
-		DEBUG("ARP GEN: widget constructor() .. ");
 
 		setModule(module);
-		setPanel(createPanel(asset::plugin(pluginInstance, "res/ArpGen/arpgen-4.svg")));
+		//setPanel(createPanel(asset::plugin(pluginInstance, "res/ArpGen/arpgen-5.svg")));
+		setPanel(createPanel(asset::plugin(pluginInstance, "res/ArpGen/arpgen-5-silver.svg")));
 
 		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
 		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
@@ -2704,25 +2201,13 @@ struct TcArpGenWidget : ModuleWidget {
 		addOutput(createOutputCentered<PJ301MPort>(_UI_POS_VOCT_THREE_OUTPUT, module, TcArpGen::VOCT_THREE_OUTPUT));
 		addOutput(createOutputCentered<PJ301MPort>(_UI_POS_VOCT_TWO_OUTPUT, module, TcArpGen::VOCT_TWO_OUTPUT));
 
-		addChild(createLightCentered<SmallLight<OrangeLight>>(_UI_POS_ARP_DELAY_0_LED_LIGHT, module, TcArpGen::ARP_DELAY_0_LED_LIGHT));
-		addChild(createLightCentered<SmallLight<OrangeLight>>(_UI_POS_ARP_DELAY_1_LED_LIGHT, module, TcArpGen::ARP_DELAY_1_LED_LIGHT));
-		addChild(createLightCentered<SmallLight<OrangeLight>>(_UI_POS_ARP_DELAY_2_LED_LIGHT, module, TcArpGen::ARP_DELAY_2_LED_LIGHT));
-		addChild(createLightCentered<SmallLight<OrangeLight>>(_UI_POS_ARP_DELAY_3_LED_LIGHT, module, TcArpGen::ARP_DELAY_3_LED_LIGHT));
+		addChild(createLightCentered<TinyLight<OrangeLight>>(_UI_POS_ARP_DELAY_0_LED_LIGHT, module, TcArpGen::ARP_DELAY_0_LED_LIGHT));
+		addChild(createLightCentered<TinyLight<OrangeLight>>(_UI_POS_ARP_DELAY_1_LED_LIGHT, module, TcArpGen::ARP_DELAY_1_LED_LIGHT));
+		addChild(createLightCentered<TinyLight<OrangeLight>>(_UI_POS_ARP_DELAY_2_LED_LIGHT, module, TcArpGen::ARP_DELAY_2_LED_LIGHT));
+		addChild(createLightCentered<TinyLight<OrangeLight>>(_UI_POS_ARP_DELAY_3_LED_LIGHT, module, TcArpGen::ARP_DELAY_3_LED_LIGHT));
 		addChild(createLightCentered<MediumLight<GreenLight>>(_UI_POS_DIRECTION_FORWARD_LED_LIGHT, module, TcArpGen::DIRECTION_FORWARD_LED_LIGHT));
 		addChild(createLightCentered<MediumLight<GreenLight>>(_UI_POS_DIRECTION_REVERSE_LED_LIGHT, module, TcArpGen::DIRECTION_REVERSE_LED_LIGHT));
 		addChild(createLightCentered<MediumLight<GreenLight>>(_UI_POS_DOUBLE_TIME_LED_LIGHT, module, TcArpGen::DOUBLE_TIME_LED_LIGHT));
-		// addChild(createLightCentered<SmallLight<RedLight>>(_UI_POS_HARMONY_1_DELAY_0_LED_LIGHT, module, TcArpGen::HARMONY_1_DELAY_0_LED_LIGHT));
-		// addChild(createLightCentered<SmallLight<RedLight>>(_UI_POS_HARMONY_1_DELAY_1_LED_LIGHT, module, TcArpGen::HARMONY_1_DELAY_1_LED_LIGHT));
-		// addChild(createLightCentered<SmallLight<RedLight>>(_UI_POS_HARMONY_1_DELAY_2_LED_LIGHT, module, TcArpGen::HARMONY_1_DELAY_2_LED_LIGHT));
-		// addChild(createLightCentered<SmallLight<RedLight>>(_UI_POS_HARMONY_1_DELAY_3_LED_LIGHT, module, TcArpGen::HARMONY_1_DELAY_3_LED_LIGHT));
-		// addChild(createLightCentered<SmallLight<RedLight>>(_UI_POS_HARMONY_2_DELAY_0_LED_LIGHT, module, TcArpGen::HARMONY_2_DELAY_0_LED_LIGHT));
-		// addChild(createLightCentered<SmallLight<RedLight>>(_UI_POS_HARMONY_2_DELAY_1_LED_LIGHT, module, TcArpGen::HARMONY_2_DELAY_1_LED_LIGHT));
-		// addChild(createLightCentered<SmallLight<RedLight>>(_UI_POS_HARMONY_2_DELAY_2_LED_LIGHT, module, TcArpGen::HARMONY_2_DELAY_2_LED_LIGHT));
-		// addChild(createLightCentered<SmallLight<RedLight>>(_UI_POS_HARMONY_2_DELAY_3_LED_LIGHT, module, TcArpGen::HARMONY_2_DELAY_3_LED_LIGHT));
-		// addChild(createLightCentered<SmallLight<RedLight>>(_UI_POS_HARMONY_3_DELAY_0_LED_LIGHT, module, TcArpGen::HARMONY_3_DELAY_0_LED_LIGHT));
-		// addChild(createLightCentered<SmallLight<RedLight>>(_UI_POS_HARMONY_3_DELAY_1_LED_LIGHT, module, TcArpGen::HARMONY_3_DELAY_1_LED_LIGHT));
-		// addChild(createLightCentered<SmallLight<RedLight>>(_UI_POS_HARMONY_3_DELAY_2_LED_LIGHT, module, TcArpGen::HARMONY_3_DELAY_2_LED_LIGHT));
-		// addChild(createLightCentered<SmallLight<RedLight>>(_UI_POS_HARMONY_3_DELAY_3_LED_LIGHT, module, TcArpGen::HARMONY_3_DELAY_3_LED_LIGHT));
 		addChild(createLightCentered<MediumLight<RedLight>>(_UI_POS_KEY_ORDER_AS_RECEIVED_LED_LIGHT, module, TcArpGen::KEY_ORDER_AS_RECEIVED_LED_LIGHT));
 		addChild(createLightCentered<MediumLight<RedLight>>(_UI_POS_KEY_ORDER_HIGH_TO_LOW_LED_LIGHT, module, TcArpGen::KEY_ORDER_HIGH_TO_LOW_LED_LIGHT));
 		addChild(createLightCentered<MediumLight<RedLight>>(_UI_POS_KEY_ORDER_LOW_TO_HIGH_LED_LIGHT, module, TcArpGen::KEY_ORDER_LOW_TO_HIGH_LED_LIGHT));
@@ -2776,8 +2261,37 @@ struct TcArpGenWidget : ModuleWidget {
 		ScaleMenu<TcArpGen> * pScaleMenu = createMenuItem<ScaleMenu<TcArpGen>>("Scale", RIGHT_ARROW);
 		pScaleMenu->module = module;
 		menu->addChild(pScaleMenu);
+
+		menu->addChild(new MenuSeparator());
+		PolyExternalScaleFormatMenu<TcArpGen> * pScaleFormatMenu = createMenuItem<PolyExternalScaleFormatMenu<TcArpGen>>("Poly External Scale Format", RIGHT_ARROW);
+		pScaleFormatMenu->module = module;
+		menu->addChild(pScaleFormatMenu);
+
+		menu->addChild(new MenuSeparator());
+		ThemeMenu<TcArpGen> * pThemeMenu = createMenuItem<ThemeMenu<TcArpGen>>("Theme", RIGHT_ARROW);
+		pThemeMenu->module = module;
+		menu->addChild(pThemeMenu);
+
 	}
 
+	void step() override {
+		if (module) {
+			// Redraw panel if required 
+			TcArpGen * pModule = dynamic_cast<TcArpGen*>(this->module);
+			if (pModule->mTheme.redrawRequired()) {
+				int themeId = pModule->mTheme.getTheme(); 
+				if (themeId == 0) {        // silver
+					setPanel(APP->window->loadSvg(asset::plugin(pluginInstance, "res/ArpGen/arpgen-5-silver.svg")));
+				} else if (themeId == 1) { // grey
+					setPanel(APP->window->loadSvg(asset::plugin(pluginInstance, "res/ArpGen/arpgen-5-grey.svg")));
+				} else if (themeId == 2) { // blue
+					setPanel(APP->window->loadSvg(asset::plugin(pluginInstance, "res/ArpGen/arpgen-5.svg")));
+				}
+				pModule->mTheme.redrawComplete();
+			}
+		}
+		Widget::step();
+	}
 };
 
 

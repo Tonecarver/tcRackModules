@@ -323,7 +323,7 @@ private:
 
          if (mExecuteDirection == LSystemExecuteDirection::DIRECTION_FORWARD_REVERSE)
          {
-            DEBUG(( "End of pattern : toggle direction" ));
+            // DEBUG(( "End of pattern : toggle direction" ));
             if (isScanningForward())
             {
                setScanDirectionReverse();

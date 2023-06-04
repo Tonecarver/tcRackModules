@@ -3,6 +3,9 @@
 
 #include "../lib/FastRandom.hpp"
 
+
+
+// TODO: this class is superceded by the Stepper, remove it
 enum SweepAlgorithmEnum { 
     SWEEP_UP, 
     SWEEP_DOWN,

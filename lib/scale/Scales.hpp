@@ -27,7 +27,7 @@ struct ScaleDefinition {
         }
     }
 
-    bool containsDegree(int degree) {
+    bool containsDegree(int degree) const {
         for (int i = 0; i < numDegrees; i++) {
             if (degrees[i] == degree) {
                 return true;

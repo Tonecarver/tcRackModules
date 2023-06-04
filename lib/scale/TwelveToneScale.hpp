@@ -60,11 +60,12 @@ class TwelveToneScale
 public:
     enum { NUM_DEGREES_PER_SCALE = 12 };
 
-   TwelveToneScale(ScaleDefinition * pScaleDefinition = 0)
-      : mTonicPitch(0) // TODO: const = C
-      , mpScaleDefinition(pScaleDefinition)
+   TwelveToneScale()
+      : mNumDegreesEnabled(0)
+      , mTonicPitch(0) // TODO: const = C
       , mOutlierStrategy(ScaleOutlierStrategy::OUTLIER_SNAP_TO_SCALE)
    {
+      memset(mDegreeEnabled, 0, sizeof(mDegreeEnabled));
       buildTables();
    }
 
@@ -107,21 +108,47 @@ public:
 
    int getNumNotes() const
    {
-      return (mpScaleDefinition != 0 
-         ? (mOutlierStrategy == ScaleOutlierStrategy::OUTLIER_PASS_THRU ? 12 : mpScaleDefinition->numDegrees) 
-         : 0 );
+      return mOutlierStrategy == ScaleOutlierStrategy::OUTLIER_PASS_THRU ? 12 : mNumDegreesEnabled;
    }
 
    void setScale(const ScaleDefinition * pScaleDefinition)
    {
       // assert != 0
-      mpScaleDefinition = pScaleDefinition;
+      bool enabledDegrees[NUM_DEGREES_PER_SCALE]; 
+      for (int i = 0; i < 12; i++) {
+         enabledDegrees[i] = pScaleDefinition->containsDegree(i);
+      }
+      setDegreesEnabled(enabledDegrees);
+   }
+
+   // pEnabledNotes is array of 12 booleans
+   // pEnabledNotes[0] indicates if C is enabled 
+   // pEnabledNotes[1] indicates if C# is enabled 
+   //    ... 
+   // pEnabledNotes[11] indicates if B is enabled 
+   void setDegreesEnabled(bool * pEnabledDegrees) { 
+      memcpy(mDegreeEnabled, pEnabledDegrees, sizeof(mDegreeEnabled));
+      mNumDegreesEnabled = 0;
+      for (int i = 0; i < 12; i++) {
+         if (pEnabledDegrees[i]) {
+            mNumDegreesEnabled++;
+         }
+      }
       buildTables();
+   }
+
+   bool isDegreeEnabled(int i) const { 
+      return mDegreeEnabled[i];
+   }
+
+   int numDegrees() const
+   {
+      return mNumDegreesEnabled;
    }
 
    bool isConfigured() const
    {
-      return (mpScaleDefinition != 0) && (mpScaleDefinition->getNumDegrees() >0);
+      return mNumDegreesEnabled > 0;
    }
 
    // return -1 if not mapped 
@@ -145,10 +172,6 @@ public:
    // // return -1 if not mapped 
    // int applyInterval(int midiNoteNumber, int musicalInterval, const NoteRange & noteRange) const; 
 
-   int numDegrees() const
-   {
-      return (mpScaleDefinition != 0 ? mpScaleDefinition->getNumDegrees() : 0);
-   }
 
 
    // degree is 0..11
@@ -169,11 +192,13 @@ public:
    }
 
 private:
-   int mTonicPitch;
-   const ScaleDefinition * mpScaleDefinition;
-   ScaleOutlierStrategy  mOutlierStrategy;
+   int  mNumDegreesEnabled; 
+   bool mDegreeEnabled[NUM_DEGREES_PER_SCALE];   // degreeEnabled[ 0..11 ] = true/false
 
-   bool mPitchEnabled[NUM_DEGREES_PER_SCALE]; // pitchEnabled[ midiNote % 12  ] = true/false
+   int  mTonicPitch;
+   bool mPitchEnabled[NUM_DEGREES_PER_SCALE];    // pitchEnabled[ midiNote % 12  ] = true/false
+
+   ScaleOutlierStrategy    mOutlierStrategy;
    int mSnap[NUM_DEGREES_PER_SCALE];          // outNote = inNote + mSnap[ inNote ];
 
    struct Interval {
@@ -202,6 +227,7 @@ private:
    int findIntervalUp(int start) const;
    int findIntervalDown(int start) const;
 
+   void setPitchesFromScaleDefinition();
 
 #ifdef INCLUDE_DEBUG_FUNCTIONS
    void showTables(char * hint = 0);

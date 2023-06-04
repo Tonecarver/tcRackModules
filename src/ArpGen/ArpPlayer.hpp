@@ -712,7 +712,7 @@ public:
       }
    }
 
-   const TwelveToneScale & getTwelveToneScale() const {
+   TwelveToneScale & getTwelveToneScale() {
       return mTwelveToneScale;
    }
 

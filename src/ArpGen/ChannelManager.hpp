@@ -38,6 +38,10 @@ struct ChannelManager {
         // i.e., overlap in the DelayList 
 
     }
+
+    bool isGateOpen() const { 
+        return mIsGateOpen;
+    }
 };
 
 #endif //  _tc_channel_mgr_h_
