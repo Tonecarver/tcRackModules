@@ -1640,6 +1640,7 @@ struct TcArpGen : Module {
 
 	void setPolyExternalScaleFormat(PolyScale::PolyScaleFormat format) { 
 		mExternalScale.setScaleFormat(format);
+		mExternalScaleVoltages.reset(); // force re-read on next poll
 	}
 
 	PolyScale::PolyScaleFormat getPolyExternalScaleFormat() const { 

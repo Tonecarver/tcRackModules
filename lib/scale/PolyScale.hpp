@@ -33,6 +33,7 @@ struct PolyScale {
     }
     
     // TODO: add get scale type name() 
+    // TODO: delete mTonic, or fix up how it is used, setting it to non-zero causes problems
 
     int getTonic()      const { return mTonic; }
     int getNumDegrees() const { return mNumDegrees; }    
@@ -46,6 +47,10 @@ struct PolyScale {
         } else {
             DEBUG("Bad scale type: %d", mPolyScaleFormat);
         }
+        // DEBUG("Poly Scale:  tonic %d, num degrees %d", mTonic, mNumDegrees);
+        // for (int i = 0; i < 12; i++) {
+        //     DEBUG("  degree[%2d]  = %s ", i, mScaleDegrees[i] == true ? "ENABLED" : "-");
+        // }
     }
 
     void computePolyExtScale(int numChannels, float * scaleVoltages) {
@@ -55,9 +60,9 @@ struct PolyScale {
             for (int i = 0; i < numChannels; i++) {
                 if (scaleVoltages[i] > 0.1f) { 
                     mScaleDegrees[i] = true;
-                    if (scaleVoltages[i] > 8.5f) { 
-                        mTonic = i;
-                    }
+                    // if (scaleVoltages[i] > 8.5f) { 
+                    //     mTonic = i;
+                    // }
                     mNumDegrees++;
                 }
             }
@@ -73,7 +78,7 @@ struct PolyScale {
     void computeSortedVoctScale(int numChannels, float * scaleVoltages) {
         if (numChannels > 0 && numChannels <= PORT_MAX_CHANNELS) {
             clear(); 
-            mTonic = voctToDegreeRelativeToC(scaleVoltages[0]);
+            //mTonic = voctToDegreeRelativeToC(scaleVoltages[0]); 
             for (int i = 0; i < numChannels; i++) {
                 int degree = voctToDegreeRelativeToC(scaleVoltages[i]);
                 if (mScaleDegrees[degree] == false) {
