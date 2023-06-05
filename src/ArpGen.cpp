@@ -297,7 +297,7 @@ struct TcArpGen : Module {
 	};
 
 
-	std::string mRulesFilepath = "click to select file"; 
+	std::string mRulesFilepath = ""; 
 
 	// -- Scale --
 	int activeScaleIdx = 0;
@@ -340,7 +340,7 @@ struct TcArpGen : Module {
 	dsp::PulseGenerator mResetPulse;
 
 	// -- inputs --
-	NoteTable noteTable;            // Input Notes 
+	NoteTable   noteTable;          // Input Notes 
 	PolyGatedCv polyInputGatedCv;   // Gated V/Oct ControlVoltages 
 
 	// -- L-System --
@@ -395,7 +395,7 @@ struct TcArpGen : Module {
 	dsp::SchmittTrigger mRunTrigger; 
 	dsp::SchmittTrigger mRunButtonTrigger; 
 
-/** experiment */
+	// double-time
 	int mTwinkleSteps = 3;  // number of steps to take when activated
 	int mTwinkleCount = 0;  // number of active steps pending 
 	const float minTwinkleSteps = 3.f; 
@@ -404,10 +404,8 @@ struct TcArpGen : Module {
 	float mTwinklePercent = 0.5f;
 
 	bool mIsDoubleTime = false; // true if outputting at 2x clock 
-/* end */
 
 	// -- Delays -- 
-
 	enum { 
 		NUM_DELAYS = 4,
 		NUM_DELAY_SLOTS = 4
@@ -424,7 +422,6 @@ struct TcArpGen : Module {
 	float mSwingAmount = 0.f;
 	int delayPeriod = 0; // 0..3 to indicate which delay light tracer to light 
 	int delayTime = 0;   // numbr of samples until the next delay period 
-
 
 	float delayPercentageOptions[NUM_DELAY_SLOTS] = { 
   		0.f, 0.25f, 0.5f, 0.75f
@@ -451,8 +448,7 @@ struct TcArpGen : Module {
 		delayRedrawRequired = true;
 	}
 
-
-	TriggerPool<NUM_DELAY_SLOTS> mDelayTriggers[4]; // one arp + 3 harm 
+	TriggerPool<NUM_DELAY_SLOTS> mDelayTriggers[4]; // 4 trigger pools, one for one 4 steps of arp arp + 3 for 4 steps of harm harm 
 
 	struct DelaySelector { 
 		int delayIdx;
@@ -1018,10 +1014,11 @@ struct TcArpGen : Module {
 
 		json_object_set_new(rootJ, "scaleIndex", json_integer(activeScaleIdx));
 
+		json_object_set_new(rootJ, "extScaleFormat", json_integer(mExternalScale.getScaleFormat()));
+
 		json_t* enabledNotes = json_array();
 		for (int i = 0; i < 12; i++) {
 			json_array_insert_new(enabledNotes, i, json_boolean(mArpPlayer.getTwelveToneScale().isDegreeEnabled(i)));
-// 			json_array_insert_new(enabledNotes, i, json_boolean(scaleButtonEnabled[i]));
 		}
 		json_object_set_new(rootJ, "enabledNotes", enabledNotes);
 
@@ -1030,9 +1027,13 @@ struct TcArpGen : Module {
 			json_array_insert_new(delaySelectionsJ, i, json_integer(delaySelected[i]));
 		}
 		json_object_set_new(rootJ, "delaySelections", delaySelectionsJ);
+
 		json_object_set_new(rootJ, "octaveIncludesPerfect", json_integer(mOctaveIncludesPerfect));
-		json_object_set_new(rootJ, "rulesFilepath", json_string(mRulesFilepath.c_str()));
+
+ 		json_object_set_new(rootJ, "rulesFilepath", json_string(mRulesFilepath.c_str()));
+
 		json_object_set_new(rootJ, "themeId", json_integer(mTheme.getTheme()));
+
         return rootJ;
 	}
 
@@ -1051,6 +1052,13 @@ struct TcArpGen : Module {
 			scaleRedrawRequired = true;
         }
 
+        jsonValue = json_object_get(rootJ, "extScaleFormat"); /// TODO: change this to use a string name ? 
+		if (jsonValue) {
+			PolyScale::PolyScaleFormat format = (PolyScale::PolyScaleFormat) json_integer_value(jsonValue);
+			mExternalScale.setScaleFormat(format);
+			scaleRedrawRequired = true;
+		}
+
 		json_t* enabledNotes = json_object_get(rootJ, "enabledNotes");
 		if (enabledNotes) {
 			bool degreeEnabled[12]; // TODO: const 
@@ -1058,8 +1066,6 @@ struct TcArpGen : Module {
 				json_t* enabledNote = json_array_get(enabledNotes, i);
 				if (enabledNote) {
 					degreeEnabled[i] = json_boolean_value(enabledNote);
-// 					scaleButtonEnabled[i] = json_boolean_value(enabledNote);
-					// DEBUG("JSON: scaleButtonEnabled[%d] = %d", i, scaleButtonEnabled[i]);
 				}
 			}
 			mArpPlayer.getTwelveToneScale().setDegreesEnabled(degreeEnabled);
@@ -1086,10 +1092,10 @@ struct TcArpGen : Module {
 
         jsonValue = json_object_get(rootJ, "rulesFilepath");
 		if (jsonValue) {
-				mRulesFilepath = json_string_value(jsonValue);
-				if (!mRulesFilepath.empty()) {
-					loadRulesFromFile(mRulesFilepath);
-				}
+			std::string filepath = json_string_value(jsonValue);
+			if (! filepath.empty()) {
+				loadRulesFromFile(filepath);
+			}
 		}
 
         jsonValue = json_object_get(rootJ, "themeId");
@@ -1387,16 +1393,14 @@ struct TcArpGen : Module {
 		{ 
 			int notes[ PORT_MAX_CHANNELS ]; // todo; max_channels
 			int numNotes = 0;
-
 			for (int c = 0; c < PORT_MAX_CHANNELS; c++) {  // TODO: const, max_channels
 				if (polyInputGatedCv.isGateOpen(c)) {
 					notes[numNotes] = voctToPitch( polyInputGatedCv.getControlVoltage(c) );
 					numNotes++;
 				}
 			}
-
 			mArpPlayer.setNotes(numNotes, notes);
-		} // end changeDetected
+		}
 	}
 
 	// Loads rules into "pending" Lsystem 
@@ -2254,7 +2258,7 @@ struct TcArpGenWidget : ModuleWidget {
 		menu->addChild(createMenuLabel("L-System Rules File"));
 		SelectRulesFile<TcArpGen> *pSelectRulesFile = new SelectRulesFile<TcArpGen>();
 		pSelectRulesFile->module = module;
-		pSelectRulesFile->text = module->mRulesFilepath;
+		pSelectRulesFile->text = module->mRulesFilepath.empty() ? "click to select file" : module->mRulesFilepath;
 		menu->addChild(pSelectRulesFile);
 
         menu->addChild(new MenuSeparator());
